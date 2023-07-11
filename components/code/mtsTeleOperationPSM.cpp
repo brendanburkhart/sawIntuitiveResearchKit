@@ -103,7 +103,11 @@ void mtsTeleOperationPSM::Init(void)
 
     this->StateTable.AddData(mMTM.m_measured_cp, "MTM/measured_cp");
     this->StateTable.AddData(mMTM.m_measured_cv, "MTM/measured_cv");
+    this->StateTable.AddData(mMTM.m_measured_cf, "MTM/measured_cf");
     this->StateTable.AddData(mMTM.m_setpoint_cp, "MTM/setpoint_cp");
+    this->StateTable.AddData(mPSM.m_measured_cp, "PSM/measured_cp");
+    this->StateTable.AddData(mPSM.m_measured_cv, "PSM/measured_cv");
+    this->StateTable.AddData(mPSM.m_measured_cf, "PSM/measured_cf");
     this->StateTable.AddData(mPSM.m_setpoint_cp, "PSM/setpoint_cp");
     this->StateTable.AddData(m_alignment_offset, "alignment_offset");
 
@@ -120,7 +124,9 @@ void mtsTeleOperationPSM::Init(void)
     if (interfaceRequired) {
         interfaceRequired->AddFunction("measured_cp", mMTM.measured_cp);
         interfaceRequired->AddFunction("measured_cv", mMTM.measured_cv, MTS_OPTIONAL);
+        interfaceRequired->AddFunction("body/measured_cf", mMTM.measured_cf, MTS_OPTIONAL);
         interfaceRequired->AddFunction("setpoint_cp", mMTM.setpoint_cp);
+        interfaceRequired->AddFunction("servo_cpvf", mMTM.servo_cpvf);
         interfaceRequired->AddFunction("move_cp", mMTM.move_cp);
         interfaceRequired->AddFunction("gripper/measured_js", mMTM.gripper_measured_js, MTS_OPTIONAL);
         interfaceRequired->AddFunction("lock_orientation", mMTM.lock_orientation, MTS_OPTIONAL);
@@ -135,8 +141,11 @@ void mtsTeleOperationPSM::Init(void)
 
     interfaceRequired = AddInterfaceRequired("PSM");
     if (interfaceRequired) {
+        interfaceRequired->AddFunction("measured_cp", mPSM.measured_cp);
+        interfaceRequired->AddFunction("measured_cv", mPSM.measured_cv, MTS_OPTIONAL);
+        interfaceRequired->AddFunction("body/measured_cf", mPSM.measured_cf, MTS_OPTIONAL);
         interfaceRequired->AddFunction("setpoint_cp", mPSM.setpoint_cp);
-        interfaceRequired->AddFunction("servo_cp", mPSM.servo_cp);
+        interfaceRequired->AddFunction("servo_cpvf", mPSM.servo_cpvf);
         interfaceRequired->AddFunction("hold", mPSM.hold);
         interfaceRequired->AddFunction("jaw/setpoint_js", mPSM.jaw_setpoint_js, MTS_OPTIONAL);
         interfaceRequired->AddFunction("jaw/configuration_js", mPSM.jaw_configuration_js, MTS_OPTIONAL);
@@ -193,6 +202,21 @@ void mtsTeleOperationPSM::Init(void)
                                         mMTM.m_measured_cv,
                                         "MTM/measured_cv");
         mInterface->AddCommandReadState(this->StateTable,
+                                        mMTM.m_measured_cf,
+                                        "MTM/measured_cf");
+        mInterface->AddCommandReadState(this->StateTable,
+                                        mMTM.m_setpoint_cp,
+                                        "MTM/setpoint_cp");
+        mInterface->AddCommandReadState(this->StateTable,
+                                        mPSM.m_measured_cp,
+                                        "PSM/measured_cp");
+        mInterface->AddCommandReadState(this->StateTable,
+                                        mPSM.m_measured_cv,
+                                        "PSM/measured_cv");
+        mInterface->AddCommandReadState(this->StateTable,
+                                        mPSM.m_measured_cf,
+                                        "PSM/measured_cf");
+        mInterface->AddCommandReadState(this->StateTable,
                                         mPSM.m_setpoint_cp,
                                         "PSM/setpoint_cp");
         mInterface->AddCommandReadState(this->StateTable,
@@ -217,7 +241,7 @@ void mtsTeleOperationPSM::Init(void)
     }
 
     // so sent commands can be used with ros-bridge
-    mPSM.m_servo_cp.Valid() = true;
+    mPSM.m_servo_cpvf.Valid() = true;
     mPSM.m_jaw_servo_jp.Valid() = true;
 }
 
@@ -403,11 +427,8 @@ void mtsTeleOperationPSM::Startup(void)
 
     // check if MTM has measured_cv
     std::cerr << "------------------- " << CMN_LOG_DETAILS << "  we should add a config flag so users can use position only" << std::endl;
-    if (mMTM.measured_cv.IsValid()) {
-        mMTM.use_measured_cv = true;
-    } else {
-        mMTM.use_measured_cv = false;
-    }
+    mMTM.use_measured_cv = mMTM.measured_cv.IsValid();
+    mPSM.use_measured_cv = mPSM.measured_cv.IsValid();
 }
 
 void mtsTeleOperationPSM::Run(void)
@@ -642,14 +663,40 @@ void mtsTeleOperationPSM::RunAllStates(void)
         mInterface->SendError(this->GetName() + ": unable to get cartesian position from MTM");
         mTeleopState.SetDesiredState("DISABLED");
     }
-    if (mMTM.use_measured_cv) {
-        executionResult = mMTM.measured_cv(mMTM.m_measured_cv);
-        if (!executionResult.IsOK()) {
-            CMN_LOG_CLASS_RUN_ERROR << "Run: call to MTM.measured_cv failed \""
-                                    << executionResult << "\"" << std::endl;
-            mInterface->SendError(this->GetName() + ": unable to get cartesian velocity from MTM");
-            mTeleopState.SetDesiredState("DISABLED");
-        }
+    executionResult = mPSM.measured_cp(mPSM.m_measured_cp);
+    if (!executionResult.IsOK()) {
+        CMN_LOG_CLASS_RUN_ERROR << "Run: call to PSM.measured_cp failed \""
+                                << executionResult << "\"" << std::endl;
+        mInterface->SendError(this->GetName() + ": unable to get cartesian position from PSM");
+        mTeleopState.SetDesiredState("DISABLED");
+    }
+    executionResult = mMTM.measured_cv(mMTM.m_measured_cv);
+    if (!executionResult.IsOK()) {
+        CMN_LOG_CLASS_RUN_ERROR << "Run: call to MTM.measured_cv failed \""
+                                << executionResult << "\"" << std::endl;
+        mInterface->SendError(this->GetName() + ": unable to get cartesian velocity from MTM");
+        mTeleopState.SetDesiredState("DISABLED");
+    }
+    executionResult = mPSM.measured_cv(mPSM.m_measured_cv);
+    if (!executionResult.IsOK()) {
+        CMN_LOG_CLASS_RUN_ERROR << "Run: call to PSM.measured_cv failed \""
+                                << executionResult << "\"" << std::endl;
+        mInterface->SendError(this->GetName() + ": unable to get cartesian velocity from PSM");
+        mTeleopState.SetDesiredState("DISABLED");
+    }
+    executionResult = mMTM.measured_cf(mMTM.m_measured_cf);
+    if (!executionResult.IsOK()) {
+        CMN_LOG_CLASS_RUN_ERROR << "Run: call to MTM.measured_cf failed \""
+                                << executionResult << "\"" << std::endl;
+        mInterface->SendError(this->GetName() + ": unable to get cartesian effort from MTM");
+        mTeleopState.SetDesiredState("DISABLED");
+    }
+    executionResult = mPSM.measured_cf(mPSM.m_measured_cf);
+    if (!executionResult.IsOK()) {
+        CMN_LOG_CLASS_RUN_ERROR << "Run: call to PSM.measured_cf failed \""
+                                << executionResult << "\"" << std::endl;
+        mInterface->SendError(this->GetName() + ": unable to get cartesian effort from PSM");
+        mTeleopState.SetDesiredState("DISABLED");
     }
 
     executionResult = mMTM.setpoint_cp(mMTM.m_setpoint_cp);
@@ -933,106 +980,113 @@ void mtsTeleOperationPSM::EnterEnabled(void)
 
 void mtsTeleOperationPSM::RunEnabled(void)
 {
-    if (mMTM.m_measured_cp.Valid()
-        && mPSM.m_setpoint_cp.Valid()) {
-        // follow mode
-        if (!m_clutched) {
+    if (m_clutched) {
+        return;
+    }
 
-            // on MTM, just apply user provided effort
-            if (m_following_mtm_body_servo_cf.Valid()) {
-                mMTM.body_servo_cf(m_following_mtm_body_servo_cf);
-            }
+    if (!mMTM.m_measured_cp.Valid() || !mMTM.m_setpoint_cp.Valid()) {
+        return;
+    }
 
-            // compute mtm Cartesian motion
-            vctFrm4x4 mtmPosition(mMTM.m_measured_cp.Position());
+    if (!mPSM.m_measured_cp.Valid() || !mPSM.m_setpoint_cp.Valid()) {
+        return;
+    }
 
-            // translation
-            vct3 mtmTranslation;
-            vct3 psmTranslation;
-            if (m_translation_locked) {
-                psmTranslation = mPSM.CartesianInitial.Translation();
-            } else {
-                mtmTranslation = (mtmPosition.Translation() - mMTM.CartesianInitial.Translation());
-                psmTranslation = mtmTranslation * m_scale;
-                psmTranslation = psmTranslation + mPSM.CartesianInitial.Translation();
-            }
-            // rotation
-            vctMatRot3 psmRotation;
-            if (m_rotation_locked) {
-                psmRotation.From(mPSM.CartesianInitial.Rotation());
-            } else {
-                psmRotation = mtmPosition.Rotation() * m_alignment_offset_initial;
-            }
+    // compute cartesian position
+    vctFrm4x4 mtmPosition(mMTM.m_measured_cp.Position());
+    vctFrm4x4 psmPosition(mPSM.m_measured_cp.Position());
 
-            // compute desired psm position
-            vctFrm4x4 psmCartesianGoal;
-            psmCartesianGoal.Translation().Assign(psmTranslation);
-            psmCartesianGoal.Rotation().FromNormalized(psmRotation);
+    // translation
+    vct3 mtmTranslation = mtmPosition.Translation() - mMTM.CartesianInitial.Translation();
+    vct3 psmTranslation = psmPosition.Translation() - mPSM.CartesianInitial.Translation();
 
-            // take into account changes in PSM base frame if any
-            if (mBaseFrame.measured_cp.IsValid()) {
-                vctFrm4x4 baseFrame(mBaseFrame.m_measured_cp.Position());
-                vctFrm4x4 baseFrameChange = baseFrame.Inverse() * mBaseFrame.CartesianInitial;
-                // update PSM position goal
-                psmCartesianGoal = baseFrameChange * psmCartesianGoal;
-                // update alignment offset
-                mtmPosition.Rotation().ApplyInverseTo(psmCartesianGoal.Rotation(), m_alignment_offset);
-            }
+    // rotation
+    vctMatRot3 mtmDesiredRotation = vctMatRot3(psmPosition.Rotation() * m_alignment_offset_initial.Inverse());
+    vctMatRot3 psmDesiredRotation = vctMatRot3(mtmPosition.Rotation() * m_alignment_offset_initial);
 
-            // PSM go this cartesian position -> m_servo_cp
-            mPSM.m_servo_cp.Goal().FromNormalized(psmCartesianGoal);
+    // compute desired mtm/psm position
+    vctFrm4x4 psmCartesianGoal;
+    // multiply by scale to convert from MTM space into PSM space
+    psmCartesianGoal.Translation().Assign(m_scale * mtmTranslation);
+    psmCartesianGoal.Rotation().FromNormalized(psmDesiredRotation);
 
-            // Add desired velocity if needed
-            if (mMTM.use_measured_cv) {
-                // linear is scaled and re-oriented
-                mPSM.m_servo_cp.Velocity() = m_scale * mMTM.m_measured_cv.VelocityLinear();
-                // angular is not scaled
-                mPSM.m_servo_cp.VelocityAngular() = mMTM.m_measured_cv.VelocityAngular();
-            } else {
-                mPSM.m_servo_cp.Velocity().Assign(vct3(0));
-                mPSM.m_servo_cp.VelocityAngular().Assign(vct3(0));
-            }
+    vctFrm4x4 mtmCartesianGoal;
+    // divide by scale to convert from PSM space into MTM space
+    mtmCartesianGoal.Translation().Assign((1.0 / m_scale) * psmTranslation);
+    mtmCartesianGoal.Rotation().FromNormalized(mtmDesiredRotation);
 
-            mPSM.servo_cp(mPSM.m_servo_cp);
+    // NOTE: we need take into account changes in PSM base frame if any
+    // base frame affects all three of position, velocity, and effort
 
-            if (!m_jaw.ignore) {
-                // gripper
-                if (mMTM.gripper_measured_js.IsValid()) {
-                    mMTM.gripper_measured_js(mMTM.m_gripper_measured_js);
-                    const double currentGripper = mMTM.m_gripper_measured_js.Position()[0];
-                    // see if we caught up
-                    if (!m_jaw_caught_up_after_clutch) {
-                        const double error = std::abs(currentGripper - m_gripper_ghost);
-                        if (error < mtsIntuitiveResearchKit::TeleOperationPSM::ToleranceBackFromClutch) {
-                            m_jaw_caught_up_after_clutch = true;
-                        }
-                    }
-                    // pick the rate based on back from clutch or not
-                    const double delta = m_jaw_caught_up_after_clutch ?
-                        m_jaw.rate * StateTable.PeriodStats.PeriodAvg()
-                        : m_jaw.rate_back_from_clutch * StateTable.PeriodStats.PeriodAvg();
-                    // gripper ghost below, add to catch up
-                    if (m_gripper_ghost <= (currentGripper - delta)) {
-                        m_gripper_ghost += delta;
-                    } else {
-                        // gripper ghost above, subtract to catch up
-                        if (m_gripper_ghost >= (currentGripper + delta)) {
-                            m_gripper_ghost -= delta;
-                        }
-                    }
-                    mPSM.m_jaw_servo_jp.Goal()[0] = GripperToJaw(m_gripper_ghost);
-                    // make sure we don't send goal past joint limits
-                    if (mPSM.m_jaw_servo_jp.Goal()[0] < m_gripper_to_jaw.position_min) {
-                        mPSM.m_jaw_servo_jp.Goal()[0] = m_gripper_to_jaw.position_min;
-                        m_gripper_ghost = JawToGripper(m_gripper_to_jaw.position_min);
-                    }
-                    mPSM.jaw_servo_jp(mPSM.m_jaw_servo_jp);
-                } else {
-                    mPSM.m_jaw_servo_jp.Goal()[0] = 45.0 * cmnPI_180;
-                    mPSM.jaw_servo_jp(mPSM.m_jaw_servo_jp);
-                }
+    mMTM.m_servo_cpvf.Position().FromNormalized(mtmCartesianGoal);
+    mMTM.m_servo_cpvf.PositionIsDefined() = true;
+    mPSM.m_servo_cpvf.Position().FromNormalized(psmCartesianGoal);
+    mPSM.m_servo_cpvf.PositionIsDefined() = true;
+
+    // linear is scaled and re-oriented
+    mMTM.m_servo_cpvf.Velocity().Ref<3>(0).Assign((1.0 / m_scale) * mPSM.m_measured_cv.VelocityLinear());
+    // angular is not scaled
+    mMTM.m_servo_cpvf.Velocity().Ref<3>(3).Assign(mPSM.m_measured_cv.VelocityAngular());
+    mMTM.m_servo_cpvf.VelocityIsDefined() = true;
+
+    // linear is scaled and re-oriented
+    mPSM.m_servo_cpvf.Velocity().Ref<3>(0).Assign(m_scale * mMTM.m_measured_cv.VelocityLinear());
+    // angular is not scaled
+    mPSM.m_servo_cpvf.Velocity().Ref<3>(3).Assign(mMTM.m_measured_cv.VelocityAngular());
+    mPSM.m_servo_cpvf.VelocityIsDefined() = true;
+
+    vct6 mtm_effort_sum;
+    mtm_effort_sum.Ref<3>(0) = mMTM.m_measured_cf.Force().Ref<3>(0) + (1.0 / m_scale) * mPSM.m_measured_cf.Force().Ref<3>(0);
+    mtm_effort_sum.Ref<3>(3) = mMTM.m_measured_cf.Force().Ref<3>(3) + mPSM.m_measured_cf.Force().Ref<3>(3);
+
+    mMTM.m_servo_cpvf.Effort() = mtm_effort_sum;
+    mMTM.m_servo_cpvf.EffortIsDefined() = true;
+
+    mPSM.m_servo_cpvf.Effort().Ref<3>(0).Assign(m_scale * mtm_effort_sum.Ref<3>(0));
+    mPSM.m_servo_cpvf.Effort().Ref<3>(3).Assign(mtm_effort_sum.Ref<3>(3));
+    mPSM.m_servo_cpvf.EffortIsDefined() = true;
+
+    mMTM.servo_cpvf(mMTM.m_servo_cpvf);
+    mPSM.servo_cpvf(mPSM.m_servo_cpvf);
+
+    if (m_jaw.ignore) {
+        return;
+    }
+
+    // open jaws to 45 degrees if we don't have MTM gripper position
+    if (!mMTM.gripper_measured_js.IsValid()) {
+        mPSM.m_jaw_servo_jp.Goal()[0] = 45.0 * cmnPI_180;
+        mPSM.jaw_servo_jp(mPSM.m_jaw_servo_jp);
+    } else {
+        mMTM.gripper_measured_js(mMTM.m_gripper_measured_js);
+        const double currentGripper = mMTM.m_gripper_measured_js.Position()[0];
+        // see if we caught up
+        if (!m_jaw_caught_up_after_clutch) {
+            const double error = std::abs(currentGripper - m_gripper_ghost);
+            if (error < mtsIntuitiveResearchKit::TeleOperationPSM::ToleranceBackFromClutch) {
+                m_jaw_caught_up_after_clutch = true;
             }
         }
+        // pick the rate based on back from clutch or not
+        const double delta = m_jaw_caught_up_after_clutch ?
+            m_jaw.rate * StateTable.PeriodStats.PeriodAvg()
+            : m_jaw.rate_back_from_clutch * StateTable.PeriodStats.PeriodAvg();
+        // gripper ghost below, add to catch up
+        if (m_gripper_ghost <= (currentGripper - delta)) {
+            m_gripper_ghost += delta;
+        } else {
+            // gripper ghost above, subtract to catch up
+            if (m_gripper_ghost >= (currentGripper + delta)) {
+                m_gripper_ghost -= delta;
+            }
+        }
+        mPSM.m_jaw_servo_jp.Goal()[0] = GripperToJaw(m_gripper_ghost);
+        // make sure we don't send goal past joint limits
+        if (mPSM.m_jaw_servo_jp.Goal()[0] < m_gripper_to_jaw.position_min) {
+            mPSM.m_jaw_servo_jp.Goal()[0] = m_gripper_to_jaw.position_min;
+            m_gripper_ghost = JawToGripper(m_gripper_to_jaw.position_min);
+        }
+        mPSM.jaw_servo_jp(mPSM.m_jaw_servo_jp);
     }
 }
 

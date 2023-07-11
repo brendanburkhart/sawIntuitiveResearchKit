@@ -26,6 +26,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <cisstParameterTypes/prmPositionJointSet.h>
 #include <cisstParameterTypes/prmPositionJointGet.h>
 #include <cisstParameterTypes/prmConfigurationJoint.h>
+#include <cisstParameterTypes/prmStateCartesian.h>
 #include <cisstParameterTypes/prmStateJoint.h>
 #include <cisstParameterTypes/prmPositionCartesianGet.h>
 #include <cisstParameterTypes/prmPositionCartesianSet.h>
@@ -199,6 +200,7 @@ class CISST_EXPORT mtsIntuitiveResearchKitArm: public mtsTaskPeriodic
     virtual void body_set_cf_orientation_absolute(const bool & absolute);
     virtual void use_gravity_compensation(const bool & gravityCompensation);
     virtual void servo_ci(const prmCartesianImpedance & gains);
+    virtual void servo_cpvf(const prmStateCartesian & cs);
 
     /*! Set base coordinate frame, this will be added to the kinematics */
     virtual void set_base_frame(const prmPositionCartesianSet & newBaseFrame);
@@ -318,7 +320,7 @@ class CISST_EXPORT mtsIntuitiveResearchKitArm: public mtsTaskPeriodic
 
     // cache cartesian goal position and increment
     bool m_pid_new_goal = false;
-    prmPositionCartesianSet m_servo_cp;
+    prmStateCartesian m_servo_cpvf;
     vctFrm3 mCartesianRelative;
 
     // internal kinematics
@@ -463,7 +465,7 @@ class CISST_EXPORT mtsIntuitiveResearchKitArm: public mtsTaskPeriodic
 
     virtual void control_servo_jp(void);
     virtual void control_move_jp(void);
-    virtual void control_servo_cp(void);
+    virtual void control_servo_cpvf(void);
     virtual void control_move_cp(void);
     virtual void control_servo_jf(void);
     virtual void control_servo_cf(void);

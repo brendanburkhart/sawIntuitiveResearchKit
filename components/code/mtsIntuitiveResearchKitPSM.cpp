@@ -1225,7 +1225,10 @@ void mtsIntuitiveResearchKitPSM::jaw_servo_jp(const prmPositionJointSet & jawPos
                                    mtsIntuitiveResearchKitArmTypes::POSITION_MODE);
             // make sure all other joints have a reasonable cartesian
             // goal for all other joints
-            m_servo_cp.Goal().Assign(m_setpoint_cp.Position());
+            m_servo_cpvf.Position().Assign(m_setpoint_cp.Position());
+            m_servo_cpvf.PositionIsDefined() = true;
+            m_servo_cpvf.VelocityIsDefined() = false;
+            m_servo_cpvf.EffortIsDefined() = false;
         }
         break;
     default:

@@ -23,11 +23,13 @@
 #include <cisstParameterTypes/prmEventButton.h>
 #include <cisstParameterTypes/prmPositionCartesianGet.h>
 #include <cisstParameterTypes/prmVelocityCartesianGet.h>
+#include <cisstParameterTypes/prmForceCartesianGet.h>
 #include <cisstParameterTypes/prmPositionCartesianSet.h>
 #include <cisstParameterTypes/prmForceCartesianSet.h>
 #include <cisstParameterTypes/prmStateJoint.h>
 #include <cisstParameterTypes/prmConfigurationJoint.h>
 #include <cisstParameterTypes/prmPositionJointSet.h>
+#include <cisstParameterTypes/prmStateCartesian.h>
 
 #include <sawIntuitiveResearchKit/mtsIntuitiveResearchKit.h>
 #include <sawIntuitiveResearchKit/mtsStateMachine.h>
@@ -103,7 +105,9 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     struct {
         mtsFunctionRead  measured_cp;
         mtsFunctionRead  measured_cv;
+        mtsFunctionRead  measured_cf;
         mtsFunctionRead  setpoint_cp;
+        mtsFunctionWrite servo_cpvf;
         mtsFunctionWrite move_cp;
         mtsFunctionRead  gripper_measured_js;
         mtsFunctionWrite lock_orientation;
@@ -117,16 +121,23 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
         prmStateJoint m_gripper_measured_js;
         prmPositionCartesianGet m_measured_cp;
         prmVelocityCartesianGet m_measured_cv;
+        prmForceCartesianGet    m_measured_cf;
         prmPositionCartesianGet m_setpoint_cp;
+        prmStateCartesian m_servo_cpvf;
         prmPositionCartesianSet m_move_cp;
         bool use_measured_cv = false;
         vctFrm4x4 CartesianInitial;
     } mMTM;
 
     struct {
+        mtsFunctionRead  measured_cp;
+        mtsFunctionRead  measured_cv;
+        mtsFunctionRead  measured_cf;
         mtsFunctionRead  setpoint_cp;
-        mtsFunctionWrite servo_cp;
+        mtsFunctionWrite servo_cpvf;
+
         mtsFunctionVoid  hold;
+
         mtsFunctionRead  jaw_setpoint_js;
         mtsFunctionRead  jaw_configuration_js;
         mtsFunctionWrite jaw_servo_jp;
@@ -134,11 +145,16 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
         mtsFunctionRead  operating_state;
         mtsFunctionWrite state_command;
 
+        prmPositionCartesianGet m_measured_cp;
+        prmVelocityCartesianGet m_measured_cv;
+        prmForceCartesianGet    m_measured_cf;
+        prmPositionCartesianGet m_setpoint_cp;
+        prmStateCartesian m_servo_cpvf;
+
         prmStateJoint m_jaw_setpoint_js;
         prmConfigurationJoint m_jaw_configuration_js;
-        prmPositionCartesianGet m_setpoint_cp;
-        prmPositionCartesianSet m_servo_cp;
         prmPositionJointSet     m_jaw_servo_jp;
+        bool use_measured_cv = false;
         vctFrm4x4 CartesianInitial;
     } mPSM;
 
