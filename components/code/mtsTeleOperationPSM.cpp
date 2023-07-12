@@ -58,6 +58,52 @@ void mtsTeleOperationPSM::Arm::populateInterface(mtsInterfaceRequired* interface
     interfaceRequired->AddFunction("use_gravity_compensation", use_gravity_compensation);
 }
 
+prmStateCartesian mtsTeleOperationPSM::Arm::computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset,
+                                                        double size_scale, double force_scale) const {
+    // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    // NOTE: we need take into account changes in PSM base frame if any
+    // base frame affects all three of position, velocity, and effort
+    // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    prmStateCartesian goalState;
+
+    vctFrm4x4 position(m_measured_cp.Position());
+    vctFrm4x4 targetPosition(target->m_measured_cp.Position());
+
+    // translation
+    vct3 relativeTranslation = targetPosition.Translation() - target->CartesianInitial.Translation();
+    vct3 goalTranslation = CartesianInitial.Translation() + size_scale * relativeTranslation;
+
+    // rotation
+    vctMatRot3 goalRotation = vctMatRot3(targetPosition.Rotation() * alignment_offset);
+
+    // desired Cartesian position
+    vctFrm4x4 goalPosition;
+    goalPosition.Translation().Assign(goalTranslation);
+    goalPosition.Rotation().FromNormalized(goalRotation);
+
+    goalState.Position().FromNormalized(goalPosition);
+    goalState.PositionIsDefined() = true;
+
+    // linear is scaled and re-oriented
+    goalState.Velocity().Ref<3>(0).Assign(size_scale * target->m_measured_cv.VelocityLinear());
+    // angular is not scaled
+    goalState.Velocity().Ref<3>(3).Assign(target->m_measured_cv.VelocityAngular());
+    goalState.VelocityIsDefined() = true;
+
+    vct3 targetLinearForce = -force_scale * target->m_spatial_measured_cf.Force().Ref<3>(0);
+    vctDouble6 localForce = m_spatial_measured_cf.Force();
+    vct3 externalLinearForce = targetLinearForce - localForce.Ref<3>(0);
+    goalState.Effort().Ref<3>(0) = externalLinearForce;
+
+    vct3 torque = -target->m_spatial_measured_cf.Force().Ref<3>(3);
+    vct3 externalTorque = torque - localForce.Ref<3>(3);
+    goalState.Effort().Ref<3>(3) = externalTorque;
+    goalState.EffortIsDefined() = true;
+
+    return goalState;
+}
+
 void mtsTeleOperationPSM::ArmMTM::populateInterface(mtsInterfaceRequired* interfaceRequired) {
     Arm::populateInterface(interfaceRequired);
 
@@ -987,64 +1033,8 @@ void mtsTeleOperationPSM::RunEnabled(void)
         return;
     }
 
-    // compute cartesian position
-    vctFrm4x4 mtmPosition(mMTM.m_measured_cp.Position());
-    vctFrm4x4 psmPosition(mPSM.m_measured_cp.Position());
-
-    // translation
-    vct3 mtmRelativeTranslation = mtmPosition.Translation() - mMTM.CartesianInitial.Translation();
-    vct3 psmRelativeTranslation = psmPosition.Translation() - mPSM.CartesianInitial.Translation();
-
-    vct3 mtmGoalTranslation = mMTM.CartesianInitial.Translation() + ((1.0 / m_scale) * psmRelativeTranslation);
-    vct3 psmGoalTranslation = mPSM.CartesianInitial.Translation() + (m_scale * mtmRelativeTranslation);
-
-    // rotation
-    vctMatRot3 mtmGoalRotation = vctMatRot3(psmPosition.Rotation() * m_alignment_offset_initial.Inverse());
-    vctMatRot3 psmGoalRotation = vctMatRot3(mtmPosition.Rotation() * m_alignment_offset_initial);
-
-    // compute desired mtm/psm position
-    vctFrm4x4 psmCartesianGoal;
-    // multiply by scale to convert from MTM space into PSM space
-    psmCartesianGoal.Translation().Assign(psmGoalTranslation);
-    psmCartesianGoal.Rotation().FromNormalized(psmGoalRotation);
-
-    vctFrm4x4 mtmCartesianGoal;
-    // divide by scale to convert from PSM space into MTM space
-    mtmCartesianGoal.Translation().Assign(mtmGoalTranslation);
-    mtmCartesianGoal.Rotation().FromNormalized(mtmGoalRotation);
-
-    // NOTE: we need take into account changes in PSM base frame if any
-    // base frame affects all three of position, velocity, and effort
-
-    mMTM.m_servo_cpvf.Position().FromNormalized(mtmCartesianGoal);
-    mMTM.m_servo_cpvf.PositionIsDefined() = true;
-    mPSM.m_servo_cpvf.Position().FromNormalized(psmCartesianGoal);
-    mPSM.m_servo_cpvf.PositionIsDefined() = true;
-
-    // linear is scaled and re-oriented
-    mMTM.m_servo_cpvf.Velocity().Ref<3>(0).Assign((1.0 / m_scale) * mPSM.m_measured_cv.VelocityLinear());
-    // angular is not scaled
-    mMTM.m_servo_cpvf.Velocity().Ref<3>(3).Assign(mPSM.m_measured_cv.VelocityAngular());
-    mMTM.m_servo_cpvf.VelocityIsDefined() = true;
-
-    // linear is scaled and re-oriented
-    mPSM.m_servo_cpvf.Velocity().Ref<3>(0).Assign(m_scale * mMTM.m_measured_cv.VelocityLinear());
-    // angular is not scaled
-    mPSM.m_servo_cpvf.Velocity().Ref<3>(3).Assign(mMTM.m_measured_cv.VelocityAngular());
-    mPSM.m_servo_cpvf.VelocityIsDefined() = true;
-
-    vct6 effort_sum;
-    effort_sum.Ref<3>(0) = mMTM.m_spatial_measured_cf.Force().Ref<3>(0) + mPSM.m_spatial_measured_cf.Force().Ref<3>(0);
-    effort_sum.Ref<3>(3) = mMTM.m_spatial_measured_cf.Force().Ref<3>(3) + mPSM.m_spatial_measured_cf.Force().Ref<3>(3);
-
-    mMTM.m_servo_cpvf.Effort() = -effort_sum;
-    mMTM.m_servo_cpvf.EffortIsDefined() = true;
-
-    effort_sum.Ref<3>(0) = m_scale * mMTM.m_spatial_measured_cf.Force().Ref<3>(0) + mPSM.m_spatial_measured_cf.Force().Ref<3>(0);
-    effort_sum.Ref<3>(3) = mMTM.m_spatial_measured_cf.Force().Ref<3>(3) + mPSM.m_spatial_measured_cf.Force().Ref<3>(3);
-
-    mPSM.m_servo_cpvf.Effort() = -effort_sum;
-    mPSM.m_servo_cpvf.EffortIsDefined() = true;
+    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM, m_alignment_offset_initial, m_scale, m_scale);
+    mMTM.m_servo_cpvf = mMTM.computeGoalFromTarget(&mPSM, m_alignment_offset_initial.Inverse(), 1.0 / m_scale, 1.0);
 
     mMTM.servo_cpvf(mMTM.m_servo_cpvf);
     mPSM.servo_cpvf(mPSM.m_servo_cpvf);

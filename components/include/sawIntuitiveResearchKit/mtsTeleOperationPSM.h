@@ -105,7 +105,10 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     class Arm {
     public:
         virtual ~Arm() {};
+
         virtual void populateInterface(mtsInterfaceRequired* interfaceRequired);
+        virtual prmStateCartesian computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset,
+                                                        double size_scale, double force_scale) const;
 
         mtsFunctionRead  operating_state;
         mtsFunctionWrite state_command;
