@@ -973,7 +973,13 @@ void mtsIntuitiveResearchKitArm::get_robot_data(void)
         m_body_jacobian_transpose.Assign(m_body_jacobian.Transpose());
         nmrPInverse(m_body_jacobian_transpose, m_jacobian_transpose_pinverse_data);
         vctDoubleVec wrench(6);
-        wrench.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), m_kin_measured_js.Effort());
+        if (!filtered_joint_forces.Any()) {
+            filtered_joint_forces = m_kin_measured_js.Effort();
+        } else {
+            filtered_joint_forces = ((1.0 - joint_force_filter_cutoff) * filtered_joint_forces) + joint_force_filter_cutoff * m_kin_measured_js.Effort();
+        }
+
+        wrench.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), filtered_joint_forces);
         if (m_body_cf_orientation_absolute) {
             // forces
             relative.Assign(wrench.Ref(3, 0));
@@ -1544,41 +1550,31 @@ void mtsIntuitiveResearchKitArm::control_servo_cpvf(void)
         jv.Zeros();
     }
 
-    // finally send new joint values
     servo_jp_internal(jp, jv);
 
     m_pid_feed_forward_servo_jf.ForceTorque().Zeros();
     if (m_servo_cpvf.EffortIsDefined()) {
-        // update torques based on wrench
-        vctDoubleVec wrench(6);
-
         // get force preload from derived classes, in most cases it will be zero,
         // but the MTM uses it for platform control for MTM
         vctDoubleVec effortPreload(number_of_joints_kinematics());
         vctDoubleVec wrenchPreload(6);
         control_servo_cf_preload(effortPreload, wrenchPreload);
-        m_pid_feed_forward_servo_jf.ForceTorque().ProductOf(m_body_jacobian.Transpose(), wrenchPreload);
-        m_pid_feed_forward_servo_jf.ForceTorque().Add(effortPreload);
 
-        // use forward kinematics orientation to have constant wrench orientation
-        vct3 relative, absolute;
-        // force
-        relative.Assign(m_servo_cpvf.Effort().Ref<3>(0));
-        m_measured_cp_frame.Rotation().ApplyInverseTo(relative, absolute);
-        wrench.Ref(3, 0).Assign(absolute);
-        // torque
-        relative.Assign(m_servo_cpvf.Effort().Ref<3>(3));
-        m_measured_cp_frame.Rotation().ApplyInverseTo(relative, absolute);
-        wrench.Ref(3, 3).Assign(absolute);
-
+        // compute joint forces from cartesian wrench using spatial jacobian
+        vctDoubleVec wrench(6);
+        wrench.Assign(m_servo_cpvf.Effort());
         vctDoubleVec joint_forces(number_of_joints_kinematics());
-        joint_forces.ProductOf(m_body_jacobian.Transpose(), wrench);
-        m_pid_feed_forward_servo_jf.ForceTorque().Add(joint_forces);
-    }
+        joint_forces.ProductOf(m_spatial_jacobian.Transpose(), wrench + wrenchPreload);
+        joint_forces.Add(effortPreload);
 
-    // add gravity compensation if needed
-    if (m_gravity_compensation) {
-        m_pid_feed_forward_servo_jf.ForceTorque().Add(m_gravity_compensation_setpoint_js.Effort());
+        // feed-forward joint forces, but leave wrist/gimbal forces zero
+        m_pid_feed_forward_servo_jf.ForceTorque().Ref(3).Add(joint_forces.Ref(3));
+        int wrist_joints = number_of_joints_kinematics() - 3;
+        m_pid_feed_forward_servo_jf.ForceTorque().Ref(wrist_joints, 3).Add(0.0 * joint_forces.Ref(wrist_joints, 3));
+        int non_kinematic_joints = number_of_joints() - number_of_joints_kinematics();
+        if (non_kinematic_joints > 0) {
+            m_pid_feed_forward_servo_jf.ForceTorque().Ref(non_kinematic_joints, number_of_joints_kinematics()).Zeros();
+        }
     }
 
     PID.feed_forward_jf(m_pid_feed_forward_servo_jf);

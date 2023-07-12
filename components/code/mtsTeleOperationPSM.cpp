@@ -46,6 +46,37 @@ mtsTeleOperationPSM::~mtsTeleOperationPSM()
 {
 }
 
+void mtsTeleOperationPSM::Arm::populateInterface(mtsInterfaceRequired* interfaceRequired) {
+    interfaceRequired->AddFunction("operating_state", operating_state);
+    interfaceRequired->AddFunction("state_command", state_command);
+
+    interfaceRequired->AddFunction("measured_cp", measured_cp);
+    interfaceRequired->AddFunction("measured_cv", measured_cv, MTS_OPTIONAL);
+    interfaceRequired->AddFunction("spatial/measured_cf", spatial_measured_cf, MTS_OPTIONAL);
+    interfaceRequired->AddFunction("setpoint_cp", setpoint_cp);
+    interfaceRequired->AddFunction("servo_cpvf", servo_cpvf);
+    interfaceRequired->AddFunction("use_gravity_compensation", use_gravity_compensation);
+}
+
+void mtsTeleOperationPSM::ArmMTM::populateInterface(mtsInterfaceRequired* interfaceRequired) {
+    Arm::populateInterface(interfaceRequired);
+
+    interfaceRequired->AddFunction("move_cp", move_cp);
+    interfaceRequired->AddFunction("gripper/measured_js", gripper_measured_js, MTS_OPTIONAL);
+    interfaceRequired->AddFunction("lock_orientation", lock_orientation, MTS_OPTIONAL);
+    interfaceRequired->AddFunction("unlock_orientation", unlock_orientation, MTS_OPTIONAL);
+    interfaceRequired->AddFunction("body/servo_cf", body_servo_cf);
+}
+
+void mtsTeleOperationPSM::ArmPSM::populateInterface(mtsInterfaceRequired* interfaceRequired) {
+    Arm::populateInterface(interfaceRequired);
+
+    interfaceRequired->AddFunction("hold", hold);
+    interfaceRequired->AddFunction("jaw/setpoint_js", jaw_setpoint_js, MTS_OPTIONAL);
+    interfaceRequired->AddFunction("jaw/configuration_js", jaw_configuration_js, MTS_OPTIONAL);
+    interfaceRequired->AddFunction("jaw/servo_jp", jaw_servo_jp, MTS_OPTIONAL);
+}
+
 void mtsTeleOperationPSM::Init(void)
 {
     // configure state machine
@@ -103,11 +134,11 @@ void mtsTeleOperationPSM::Init(void)
 
     this->StateTable.AddData(mMTM.m_measured_cp, "MTM/measured_cp");
     this->StateTable.AddData(mMTM.m_measured_cv, "MTM/measured_cv");
-    this->StateTable.AddData(mMTM.m_measured_cf, "MTM/measured_cf");
+    this->StateTable.AddData(mMTM.m_spatial_measured_cf, "MTM/spatial_measured_cf");
     this->StateTable.AddData(mMTM.m_setpoint_cp, "MTM/setpoint_cp");
     this->StateTable.AddData(mPSM.m_measured_cp, "PSM/measured_cp");
     this->StateTable.AddData(mPSM.m_measured_cv, "PSM/measured_cv");
-    this->StateTable.AddData(mPSM.m_measured_cf, "PSM/measured_cf");
+    this->StateTable.AddData(mPSM.m_spatial_measured_cf, "PSM/spatial_measured_cf");
     this->StateTable.AddData(mPSM.m_setpoint_cp, "PSM/setpoint_cp");
     this->StateTable.AddData(m_alignment_offset, "alignment_offset");
 
@@ -122,36 +153,14 @@ void mtsTeleOperationPSM::Init(void)
     // setup cisst interfaces
     mtsInterfaceRequired * interfaceRequired = AddInterfaceRequired("MTM");
     if (interfaceRequired) {
-        interfaceRequired->AddFunction("measured_cp", mMTM.measured_cp);
-        interfaceRequired->AddFunction("measured_cv", mMTM.measured_cv, MTS_OPTIONAL);
-        interfaceRequired->AddFunction("body/measured_cf", mMTM.measured_cf, MTS_OPTIONAL);
-        interfaceRequired->AddFunction("setpoint_cp", mMTM.setpoint_cp);
-        interfaceRequired->AddFunction("servo_cpvf", mMTM.servo_cpvf);
-        interfaceRequired->AddFunction("move_cp", mMTM.move_cp);
-        interfaceRequired->AddFunction("gripper/measured_js", mMTM.gripper_measured_js, MTS_OPTIONAL);
-        interfaceRequired->AddFunction("lock_orientation", mMTM.lock_orientation, MTS_OPTIONAL);
-        interfaceRequired->AddFunction("unlock_orientation", mMTM.unlock_orientation, MTS_OPTIONAL);
-        interfaceRequired->AddFunction("body/servo_cf", mMTM.body_servo_cf);
-        interfaceRequired->AddFunction("use_gravity_compensation", mMTM.use_gravity_compensation);
-        interfaceRequired->AddFunction("operating_state", mMTM.operating_state);
-        interfaceRequired->AddFunction("state_command", mMTM.state_command);
-        interfaceRequired->AddEventHandlerWrite(&mtsTeleOperationPSM::MTMErrorEventHandler,
+        mMTM.populateInterface(interfaceRequired);
+        interfaceRequired->AddEventHandlerWrite(&mtsTeleOperationPSM::MTMErrorEventHandler, 
                                                 this, "error");
     }
 
     interfaceRequired = AddInterfaceRequired("PSM");
     if (interfaceRequired) {
-        interfaceRequired->AddFunction("measured_cp", mPSM.measured_cp);
-        interfaceRequired->AddFunction("measured_cv", mPSM.measured_cv, MTS_OPTIONAL);
-        interfaceRequired->AddFunction("body/measured_cf", mPSM.measured_cf, MTS_OPTIONAL);
-        interfaceRequired->AddFunction("setpoint_cp", mPSM.setpoint_cp);
-        interfaceRequired->AddFunction("servo_cpvf", mPSM.servo_cpvf);
-        interfaceRequired->AddFunction("hold", mPSM.hold);
-        interfaceRequired->AddFunction("jaw/setpoint_js", mPSM.jaw_setpoint_js, MTS_OPTIONAL);
-        interfaceRequired->AddFunction("jaw/configuration_js", mPSM.jaw_configuration_js, MTS_OPTIONAL);
-        interfaceRequired->AddFunction("jaw/servo_jp", mPSM.jaw_servo_jp, MTS_OPTIONAL);
-        interfaceRequired->AddFunction("operating_state", mPSM.operating_state);
-        interfaceRequired->AddFunction("state_command", mPSM.state_command);
+        mPSM.populateInterface(interfaceRequired);
         interfaceRequired->AddEventHandlerWrite(&mtsTeleOperationPSM::PSMErrorEventHandler,
                                                 this, "error");
     }
@@ -201,21 +210,6 @@ void mtsTeleOperationPSM::Init(void)
         mInterface->AddCommandReadState(this->StateTable,
                                         mMTM.m_measured_cv,
                                         "MTM/measured_cv");
-        mInterface->AddCommandReadState(this->StateTable,
-                                        mMTM.m_measured_cf,
-                                        "MTM/measured_cf");
-        mInterface->AddCommandReadState(this->StateTable,
-                                        mMTM.m_setpoint_cp,
-                                        "MTM/setpoint_cp");
-        mInterface->AddCommandReadState(this->StateTable,
-                                        mPSM.m_measured_cp,
-                                        "PSM/measured_cp");
-        mInterface->AddCommandReadState(this->StateTable,
-                                        mPSM.m_measured_cv,
-                                        "PSM/measured_cv");
-        mInterface->AddCommandReadState(this->StateTable,
-                                        mPSM.m_measured_cf,
-                                        "PSM/measured_cf");
         mInterface->AddCommandReadState(this->StateTable,
                                         mPSM.m_setpoint_cp,
                                         "PSM/setpoint_cp");
@@ -684,16 +678,16 @@ void mtsTeleOperationPSM::RunAllStates(void)
         mInterface->SendError(this->GetName() + ": unable to get cartesian velocity from PSM");
         mTeleopState.SetDesiredState("DISABLED");
     }
-    executionResult = mMTM.measured_cf(mMTM.m_measured_cf);
+    executionResult = mMTM.spatial_measured_cf(mMTM.m_spatial_measured_cf);
     if (!executionResult.IsOK()) {
-        CMN_LOG_CLASS_RUN_ERROR << "Run: call to MTM.measured_cf failed \""
+        CMN_LOG_CLASS_RUN_ERROR << "Run: call to MTM.spatial_measured_cf failed \""
                                 << executionResult << "\"" << std::endl;
         mInterface->SendError(this->GetName() + ": unable to get cartesian effort from MTM");
         mTeleopState.SetDesiredState("DISABLED");
     }
-    executionResult = mPSM.measured_cf(mPSM.m_measured_cf);
+    executionResult = mPSM.spatial_measured_cf(mPSM.m_spatial_measured_cf);
     if (!executionResult.IsOK()) {
-        CMN_LOG_CLASS_RUN_ERROR << "Run: call to PSM.measured_cf failed \""
+        CMN_LOG_CLASS_RUN_ERROR << "Run: call to PSM.spatial_measured_cf failed \""
                                 << executionResult << "\"" << std::endl;
         mInterface->SendError(this->GetName() + ": unable to get cartesian effort from PSM");
         mTeleopState.SetDesiredState("DISABLED");
@@ -954,7 +948,7 @@ void mtsTeleOperationPSM::EnterEnabled(void)
     }
 
     // set MTM/PSM to Teleop (Cartesian Position Mode)
-    mMTM.use_gravity_compensation(true);
+    mMTM.use_gravity_compensation(false);
     // set forces to zero and lock/unlock orientation as needed
     prmForceCartesianSet wrench;
     mMTM.body_servo_cf(wrench);
@@ -970,6 +964,7 @@ void mtsTeleOperationPSM::EnterEnabled(void)
             mMTM.unlock_orientation();
         }
     }
+
     // check if by any chance the clutch pedal is pressed
     if (m_clutched) {
         Clutch(true);
@@ -997,23 +992,26 @@ void mtsTeleOperationPSM::RunEnabled(void)
     vctFrm4x4 psmPosition(mPSM.m_measured_cp.Position());
 
     // translation
-    vct3 mtmTranslation = mtmPosition.Translation() - mMTM.CartesianInitial.Translation();
-    vct3 psmTranslation = psmPosition.Translation() - mPSM.CartesianInitial.Translation();
+    vct3 mtmRelativeTranslation = mtmPosition.Translation() - mMTM.CartesianInitial.Translation();
+    vct3 psmRelativeTranslation = psmPosition.Translation() - mPSM.CartesianInitial.Translation();
+
+    vct3 mtmGoalTranslation = mMTM.CartesianInitial.Translation() + ((1.0 / m_scale) * psmRelativeTranslation);
+    vct3 psmGoalTranslation = mPSM.CartesianInitial.Translation() + (m_scale * mtmRelativeTranslation);
 
     // rotation
-    vctMatRot3 mtmDesiredRotation = vctMatRot3(psmPosition.Rotation() * m_alignment_offset_initial.Inverse());
-    vctMatRot3 psmDesiredRotation = vctMatRot3(mtmPosition.Rotation() * m_alignment_offset_initial);
+    vctMatRot3 mtmGoalRotation = vctMatRot3(psmPosition.Rotation() * m_alignment_offset_initial.Inverse());
+    vctMatRot3 psmGoalRotation = vctMatRot3(mtmPosition.Rotation() * m_alignment_offset_initial);
 
     // compute desired mtm/psm position
     vctFrm4x4 psmCartesianGoal;
     // multiply by scale to convert from MTM space into PSM space
-    psmCartesianGoal.Translation().Assign(m_scale * mtmTranslation);
-    psmCartesianGoal.Rotation().FromNormalized(psmDesiredRotation);
+    psmCartesianGoal.Translation().Assign(psmGoalTranslation);
+    psmCartesianGoal.Rotation().FromNormalized(psmGoalRotation);
 
     vctFrm4x4 mtmCartesianGoal;
     // divide by scale to convert from PSM space into MTM space
-    mtmCartesianGoal.Translation().Assign((1.0 / m_scale) * psmTranslation);
-    mtmCartesianGoal.Rotation().FromNormalized(mtmDesiredRotation);
+    mtmCartesianGoal.Translation().Assign(mtmGoalTranslation);
+    mtmCartesianGoal.Rotation().FromNormalized(mtmGoalRotation);
 
     // NOTE: we need take into account changes in PSM base frame if any
     // base frame affects all three of position, velocity, and effort
@@ -1035,15 +1033,17 @@ void mtsTeleOperationPSM::RunEnabled(void)
     mPSM.m_servo_cpvf.Velocity().Ref<3>(3).Assign(mMTM.m_measured_cv.VelocityAngular());
     mPSM.m_servo_cpvf.VelocityIsDefined() = true;
 
-    vct6 mtm_effort_sum;
-    mtm_effort_sum.Ref<3>(0) = mMTM.m_measured_cf.Force().Ref<3>(0) + (1.0 / m_scale) * mPSM.m_measured_cf.Force().Ref<3>(0);
-    mtm_effort_sum.Ref<3>(3) = mMTM.m_measured_cf.Force().Ref<3>(3) + mPSM.m_measured_cf.Force().Ref<3>(3);
+    vct6 effort_sum;
+    effort_sum.Ref<3>(0) = mMTM.m_spatial_measured_cf.Force().Ref<3>(0) + mPSM.m_spatial_measured_cf.Force().Ref<3>(0);
+    effort_sum.Ref<3>(3) = mMTM.m_spatial_measured_cf.Force().Ref<3>(3) + mPSM.m_spatial_measured_cf.Force().Ref<3>(3);
 
-    mMTM.m_servo_cpvf.Effort() = mtm_effort_sum;
+    mMTM.m_servo_cpvf.Effort() = -effort_sum;
     mMTM.m_servo_cpvf.EffortIsDefined() = true;
 
-    mPSM.m_servo_cpvf.Effort().Ref<3>(0).Assign(m_scale * mtm_effort_sum.Ref<3>(0));
-    mPSM.m_servo_cpvf.Effort().Ref<3>(3).Assign(mtm_effort_sum.Ref<3>(3));
+    effort_sum.Ref<3>(0) = m_scale * mMTM.m_spatial_measured_cf.Force().Ref<3>(0) + mPSM.m_spatial_measured_cf.Force().Ref<3>(0);
+    effort_sum.Ref<3>(3) = mMTM.m_spatial_measured_cf.Force().Ref<3>(3) + mPSM.m_spatial_measured_cf.Force().Ref<3>(3);
+
+    mPSM.m_servo_cpvf.Effort() = -effort_sum;
     mPSM.m_servo_cpvf.EffortIsDefined() = true;
 
     mMTM.servo_cpvf(mMTM.m_servo_cpvf);

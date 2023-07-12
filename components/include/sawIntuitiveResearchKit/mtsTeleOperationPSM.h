@@ -102,61 +102,67 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     void RunEnabled(void); // performs actual teleoperation
     void TransitionEnabled(void); // performs actual teleoperation
 
-    struct {
-        mtsFunctionRead  measured_cp;
-        mtsFunctionRead  measured_cv;
-        mtsFunctionRead  measured_cf;
-        mtsFunctionRead  setpoint_cp;
-        mtsFunctionWrite servo_cpvf;
-        mtsFunctionWrite move_cp;
-        mtsFunctionRead  gripper_measured_js;
-        mtsFunctionWrite lock_orientation;
-        mtsFunctionVoid  unlock_orientation;
-        mtsFunctionWrite body_servo_cf;
-        mtsFunctionWrite use_gravity_compensation;
+    class Arm {
+    public:
+        virtual ~Arm() {};
+        virtual void populateInterface(mtsInterfaceRequired* interfaceRequired);
 
         mtsFunctionRead  operating_state;
         mtsFunctionWrite state_command;
 
-        prmStateJoint m_gripper_measured_js;
-        prmPositionCartesianGet m_measured_cp;
-        prmVelocityCartesianGet m_measured_cv;
-        prmForceCartesianGet    m_measured_cf;
-        prmPositionCartesianGet m_setpoint_cp;
-        prmStateCartesian m_servo_cpvf;
-        prmPositionCartesianSet m_move_cp;
-        bool use_measured_cv = false;
-        vctFrm4x4 CartesianInitial;
-    } mMTM;
-
-    struct {
         mtsFunctionRead  measured_cp;
         mtsFunctionRead  measured_cv;
-        mtsFunctionRead  measured_cf;
+        mtsFunctionRead  spatial_measured_cf;
         mtsFunctionRead  setpoint_cp;
+
         mtsFunctionWrite servo_cpvf;
 
-        mtsFunctionVoid  hold;
+        mtsFunctionWrite use_gravity_compensation;
 
+        vctFrm4x4 CartesianInitial;
+
+        prmPositionCartesianGet m_measured_cp;
+        prmVelocityCartesianGet m_measured_cv;
+        prmForceCartesianGet    m_spatial_measured_cf;
+        prmPositionCartesianGet m_setpoint_cp;
+        prmStateCartesian m_servo_cpvf;
+    };
+
+    class ArmMTM : public Arm {
+    public:
+        void populateInterface(mtsInterfaceRequired* interfaceRequired) override;
+
+        mtsFunctionWrite move_cp;
+        mtsFunctionRead  gripper_measured_js;
+
+        mtsFunctionWrite lock_orientation;
+        mtsFunctionVoid  unlock_orientation;
+        mtsFunctionWrite body_servo_cf;
+
+        prmPositionCartesianSet m_move_cp;
+        prmStateJoint m_gripper_measured_js;
+
+        bool use_measured_cv = false;
+    };
+
+    class ArmPSM : public Arm {
+    public:
+        void populateInterface(mtsInterfaceRequired* interfaceRequired) override;
+
+        mtsFunctionVoid  hold;
         mtsFunctionRead  jaw_setpoint_js;
         mtsFunctionRead  jaw_configuration_js;
         mtsFunctionWrite jaw_servo_jp;
 
-        mtsFunctionRead  operating_state;
-        mtsFunctionWrite state_command;
-
-        prmPositionCartesianGet m_measured_cp;
-        prmVelocityCartesianGet m_measured_cv;
-        prmForceCartesianGet    m_measured_cf;
-        prmPositionCartesianGet m_setpoint_cp;
-        prmStateCartesian m_servo_cpvf;
-
         prmStateJoint m_jaw_setpoint_js;
         prmConfigurationJoint m_jaw_configuration_js;
-        prmPositionJointSet     m_jaw_servo_jp;
+        prmPositionJointSet m_jaw_servo_jp;
+
         bool use_measured_cv = false;
-        vctFrm4x4 CartesianInitial;
-    } mPSM;
+    };
+
+    ArmMTM mMTM;
+    ArmPSM mPSM;
 
     struct {
         mtsFunctionRead  measured_cp;
