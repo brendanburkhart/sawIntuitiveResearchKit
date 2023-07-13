@@ -973,13 +973,7 @@ void mtsIntuitiveResearchKitArm::get_robot_data(void)
         m_body_jacobian_transpose.Assign(m_body_jacobian.Transpose());
         nmrPInverse(m_body_jacobian_transpose, m_jacobian_transpose_pinverse_data);
         vctDoubleVec wrench(6);
-        if (!filtered_joint_forces.Any()) {
-            filtered_joint_forces = m_kin_measured_js.Effort();
-        } else {
-            filtered_joint_forces = ((1.0 - joint_force_filter_cutoff) * filtered_joint_forces) + joint_force_filter_cutoff * m_kin_measured_js.Effort();
-        }
-
-        wrench.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), filtered_joint_forces);
+        wrench.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), m_kin_measured_js.Effort());
         if (m_body_cf_orientation_absolute) {
             // forces
             relative.Assign(wrench.Ref(3, 0));
@@ -1550,31 +1544,34 @@ void mtsIntuitiveResearchKitArm::control_servo_cpvf(void)
         jv.Zeros();
     }
 
-    servo_jp_internal(jp, jv);
-
-    m_pid_feed_forward_servo_jf.ForceTorque().Zeros();
+    vctDoubleVec jf(number_of_joints_kinematics());
     if (m_servo_cpvf.EffortIsDefined()) {
-        // get force preload from derived classes, in most cases it will be zero,
-        // but the MTM uses it for platform control for MTM
-        vctDoubleVec effortPreload(number_of_joints_kinematics());
-        vctDoubleVec wrenchPreload(6);
-        control_servo_cf_preload(effortPreload, wrenchPreload);
-
         // compute joint forces from cartesian wrench using spatial jacobian
         vctDoubleVec wrench(6);
         wrench.Assign(m_servo_cpvf.Effort());
-        vctDoubleVec joint_forces(number_of_joints_kinematics());
-        joint_forces.ProductOf(m_spatial_jacobian.Transpose(), wrench + wrenchPreload);
-        joint_forces.Add(effortPreload);
+        jf.ProductOf(m_spatial_jacobian.Transpose(), wrench);
+    } else {
+        jf.Zeros();
+    }
 
-        // feed-forward joint forces, but leave wrist/gimbal forces zero
-        m_pid_feed_forward_servo_jf.ForceTorque().Ref(3).Add(joint_forces.Ref(3));
-        int wrist_joints = number_of_joints_kinematics() - 3;
-        m_pid_feed_forward_servo_jf.ForceTorque().Ref(wrist_joints, 3).Add(0.0 * joint_forces.Ref(wrist_joints, 3));
-        int non_kinematic_joints = number_of_joints() - number_of_joints_kinematics();
-        if (non_kinematic_joints > 0) {
-            m_pid_feed_forward_servo_jf.ForceTorque().Ref(non_kinematic_joints, number_of_joints_kinematics()).Zeros();
-        }
+    // send desired position, velocity, effort to PID
+    servo_jp_internal(jp, jv);
+
+    // get force preload from derived classes, in most cases it will be zero,
+    // but the MTM uses it for platform control for MTM
+    vctDoubleVec effortPreload(number_of_joints_kinematics());
+    vctDoubleVec wrenchPreload(6);
+    control_servo_cf_preload(effortPreload, wrenchPreload);
+
+    auto feedforward = m_pid_feed_forward_servo_jf.ForceTorque().Ref(number_of_joints_kinematics());
+    feedforward.Zeros();
+    feedforward.ProductOf(m_spatial_jacobian.Transpose(), wrenchPreload);
+    feedforward.Add(effortPreload);
+    feedforward.Add(jf);
+
+    int non_kinematic_joints = number_of_joints() - number_of_joints_kinematics();
+    if (non_kinematic_joints > 0) {
+        m_pid_feed_forward_servo_jf.ForceTorque().Ref(non_kinematic_joints, number_of_joints_kinematics()).Zeros();
     }
 
     PID.feed_forward_jf(m_pid_feed_forward_servo_jf);
@@ -1955,16 +1952,18 @@ void mtsIntuitiveResearchKitArm::servo_jp_internal(const vctDoubleVec & jp,
     }
     PID.feed_forward_jf(m_pid_feed_forward_servo_jf);
 
-    // position and velocity
+    // position, velocity, effort
     m_servo_jp_param.Goal().Assign(jp);
     m_servo_jp_param.Velocity().ForceAssign(jv);
     m_servo_jp_param.SetTimestamp(StateTable.GetTic());
+
     if (m_has_coupling) {
         m_servo_jp_param.Goal() = m_coupling.JointToActuatorPosition() * m_servo_jp_param.Goal();
         if (m_servo_jp_param.Velocity().size() != 0) {
             m_servo_jp_param.Velocity() = m_coupling.JointToActuatorPosition() * m_servo_jp_param.Velocity();
         }
     }
+
     PID.servo_jp(m_servo_jp_param);
 }
 

@@ -102,6 +102,7 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     void RunEnabled(void); // performs actual teleoperation
     void TransitionEnabled(void); // performs actual teleoperation
 
+    // Light wrapper around common arm functionality
     class Arm {
     public:
         virtual ~Arm() {};

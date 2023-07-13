@@ -361,8 +361,6 @@ class CISST_EXPORT mtsIntuitiveResearchKitArm: public mtsTaskPeriodic
     nmrPInverseDynamicData
         m_jacobian_pinverse_data,
         m_jacobian_transpose_pinverse_data;
-    vctDoubleVec filtered_joint_forces;
-    double joint_force_filter_cutoff = 0.10;
     prmForceCartesianGet m_body_measured_cf, m_spatial_measured_cf;
 
     // cartesian impendance controller
