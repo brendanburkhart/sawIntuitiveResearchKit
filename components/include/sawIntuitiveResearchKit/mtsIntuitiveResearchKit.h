@@ -29,9 +29,9 @@ namespace mtsIntuitiveResearchKit {
     const std::string FireWireProtocol = "sequential-read-broadcast-write";
 
     const double PeriodDelay = 0.06 * cmn_ms; // fixed delay
-    const double IOPeriod = cmnHzToPeriod(1500.0) - PeriodDelay;
-    const double ArmPeriod = cmnHzToPeriod(1500.0) - PeriodDelay;
-    const double TeleopPeriod = cmnHzToPeriod(1000.0) - PeriodDelay;
+    const double IOPeriod = cmnHzToPeriod(3000.0) - PeriodDelay;
+    const double ArmPeriod = cmnHzToPeriod(3000.0) - PeriodDelay;
+    const double TeleopPeriod = cmnHzToPeriod(3000.0) - PeriodDelay;
     const double WatchdogTimeout = 30.0 * cmn_ms;
 
     // DO NOT INCREASE THIS ABOVE 3 SECONDS!!!  Some power supplies
