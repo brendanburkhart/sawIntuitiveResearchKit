@@ -993,7 +993,10 @@ void mtsIntuitiveResearchKitArm::get_robot_data(void)
         m_spatial_jacobian_transpose.Assign(m_spatial_jacobian.Transpose());
         nmrPInverse(m_spatial_jacobian_transpose, m_jacobian_transpose_pinverse_data);
         wrench.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), m_kin_measured_js.Effort());
-        m_spatial_measured_cf.Force().Assign(wrench);
+        vctDouble6 spatial_wrench;
+        spatial_wrench.Assign(wrench);
+        m_spatial_measured_cf.Force().Ref<3>(0).ProductOf(m_base_frame.Rotation(), spatial_wrench.Ref<3>(0));
+        m_spatial_measured_cf.Force().Ref<3>(3).ProductOf(m_base_frame.Rotation(), spatial_wrench.Ref<3>(3));
         // valid/timestamp
         m_spatial_measured_cf.SetValid(true);
         m_spatial_measured_cf.SetTimestamp(m_kin_measured_js.Timestamp());
@@ -1547,9 +1550,14 @@ void mtsIntuitiveResearchKitArm::control_servo_cpvf(void)
     vctDoubleVec jf(number_of_joints_kinematics());
     if (m_servo_cpvf.EffortIsDefined()) {
         // compute joint forces from cartesian wrench using spatial jacobian
-        vctDoubleVec wrench(6);
+        vctDouble6 wrench;
         wrench.Assign(m_servo_cpvf.Effort());
-        jf.ProductOf(m_spatial_jacobian.Transpose(), wrench);
+        vctDouble6 relative_wrench;
+        relative_wrench.Ref<3>(0).ProductOf(m_base_frame.Rotation().Transpose(), wrench.Ref<3>(0));
+        relative_wrench.Ref<3>(3).ProductOf(m_base_frame.Rotation().Transpose(), wrench.Ref<3>(3));
+        vctDoubleVec _wrench(6);
+        _wrench.Assign(relative_wrench);
+        jf.ProductOf(m_spatial_jacobian.Transpose(), _wrench);
     } else {
         jf.Zeros();
     }
@@ -1565,8 +1573,8 @@ void mtsIntuitiveResearchKitArm::control_servo_cpvf(void)
 
     auto feedforward = m_pid_feed_forward_servo_jf.ForceTorque().Ref(number_of_joints_kinematics());
     feedforward.Zeros();
-    feedforward.ProductOf(m_spatial_jacobian.Transpose(), wrenchPreload);
-    feedforward.Add(effortPreload);
+    // feedforward.ProductOf(m_spatial_jacobian.Transpose(), wrenchPreload);
+    // feedforward.Add(effortPreload);
     feedforward.Add(jf);
 
     int non_kinematic_joints = number_of_joints() - number_of_joints_kinematics();

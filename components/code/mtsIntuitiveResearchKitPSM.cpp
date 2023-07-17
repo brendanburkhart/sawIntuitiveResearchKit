@@ -37,14 +37,16 @@ CMN_IMPLEMENT_SERVICES_DERIVED_ONEARG(mtsIntuitiveResearchKitPSM, mtsTaskPeriodi
 
 mtsIntuitiveResearchKitPSM::mtsIntuitiveResearchKitPSM(const std::string & componentName, const double periodInSeconds):
     mtsIntuitiveResearchKitArm(componentName, periodInSeconds),
-    mToolList(*this)
+    mToolList(*this),
+    mForceEstimation("/home/bburkha4/catkin_ws/src/dvrk-ros/dvrk_python/scripts/psm_force_estimation.onnx")
 {
     Init();
 }
 
 mtsIntuitiveResearchKitPSM::mtsIntuitiveResearchKitPSM(const mtsTaskPeriodicConstructorArg & arg):
     mtsIntuitiveResearchKitArm(arg),
-    mToolList(*this)
+    mToolList(*this),
+    mForceEstimation("/home/bburkha4/catkin_ws/src/dvrk-ros/dvrk_python/scripts/psm_force_estimation.onnx")
 {
     Init();
 }
