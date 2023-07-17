@@ -490,6 +490,8 @@ class CISST_EXPORT mtsIntuitiveResearchKitArm: public mtsTaskPeriodic
     virtual void control_servo_cf_preload(vctDoubleVec & effortPreload,
                                           vctDoubleVec & wrenchPreload);
 
+    virtual vctDoubleVec estimateExternalForces(const vctDoubleVec& totalForces, const vctDoubleVec& jp, const vctDoubleVec& jv);
+
     struct {
         robReflexxes Reflexxes;
         vctDoubleVec v_max;

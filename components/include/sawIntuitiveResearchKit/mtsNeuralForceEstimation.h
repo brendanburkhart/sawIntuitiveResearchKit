@@ -17,7 +17,10 @@ http://www.cisst.org/cisst/license.txt.
 #ifndef _mtsNeuralForceEstimation_h
 #define _mtsNeuralForceEstimation_h
 
-#include <onnxruntime_cxx_api.h>
+#include <cisstVector/vctDynamicMatrixTypes.h>
+#include <cisstVector/vctDynamicVectorTypes.h>
+
+#include <../onnxruntime/include/onnxruntime_cxx_api.h>
 #include <string>
 
 class mtsNeuralForceEstimation {
@@ -25,10 +28,15 @@ protected:
     Ort::Env environment;
     Ort::Session session;
 
+    std::vector<std::int64_t> input_shapes;
+    std::vector<std::string> input_names;
+    std::vector<std::string> output_names;
+
 public:
     mtsNeuralForceEstimation(const std::basic_string<ORTCHAR_T> & modelFile);
     ~mtsNeuralForceEstimation(){};
     
+    vctDoubleVec infer_jf(const vctDoubleVec& jp, const vctDoubleVec& jv);
 };
 
 #endif

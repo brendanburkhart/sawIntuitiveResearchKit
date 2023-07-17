@@ -1589,3 +1589,12 @@ void mtsIntuitiveResearchKitPSM::EventHandlerToolType(const std::string & toolTy
     }
     set_tool_present_and_configured(m_tool_present, tool_configured);
 }
+
+vctDoubleVec mtsIntuitiveResearchKitPSM::estimateExternalForces(const vctDoubleVec& totalForces, const vctDoubleVec& jp, const vctDoubleVec& jv) {
+    vctDoubleVec dynamics = mForceEstimation.infer_jf(jp.Ref(3), jv.Ref(3));
+    vctDoubleVec output(totalForces.size());
+    output.Assign(totalForces);
+    output.Ref(3).Subtract(dynamics);
+
+    return output;
+}

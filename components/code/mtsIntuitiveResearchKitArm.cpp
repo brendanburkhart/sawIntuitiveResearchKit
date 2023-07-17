@@ -992,7 +992,10 @@ void mtsIntuitiveResearchKitArm::get_robot_data(void)
 
         m_spatial_jacobian_transpose.Assign(m_spatial_jacobian.Transpose());
         nmrPInverse(m_spatial_jacobian_transpose, m_jacobian_transpose_pinverse_data);
-        wrench.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), m_kin_measured_js.Effort());
+
+        auto external_joint_forces = estimateExternalForces(m_kin_measured_js.Effort(), m_kin_measured_js.Position(), m_kin_measured_js.Velocity());
+
+        wrench.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), external_joint_forces);
         vctDouble6 spatial_wrench;
         spatial_wrench.Assign(wrench);
         m_spatial_measured_cf.Force().Ref<3>(0).ProductOf(m_base_frame.Rotation(), spatial_wrench.Ref<3>(0));
@@ -2350,4 +2353,8 @@ void mtsIntuitiveResearchKitArm::servo_cpvf(const prmStateCartesian & cs)
     // set goal
     m_servo_cpvf = cs;
     m_pid_new_goal = true;
+}
+
+vctDoubleVec mtsIntuitiveResearchKitArm::estimateExternalForces(const vctDoubleVec& totalForces, const vctDoubleVec& jp, const vctDoubleVec& jv) {
+    return totalForces;
 }

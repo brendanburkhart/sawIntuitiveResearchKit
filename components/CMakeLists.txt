@@ -28,8 +28,8 @@ set (REQUIRED_CISST_LIBRARIES
 
 find_package (cisst 1.1.0 REQUIRED ${REQUIRED_CISST_LIBRARIES})
 
-set (onnxruntime_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../onnxruntime/include/")
-set (onnxruntime_LIBRARY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../onnxruntime/lib/")
+set (onnxruntime_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/onnxruntime/include/")
+set (onnxruntime_LIBRARY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/onnxruntime/lib/")
 
 if (cisst_FOUND)
 
@@ -75,8 +75,6 @@ if (cisst_FOUND)
     set (gattlib_LIBRARY_DIR "${CMAKE_INSTALL_PREFIX}/lib")
     set (gattlib_LIBRARIES gattlib)
 
-    message(ERROR " ort='${onnxruntime_INCLUDE_DIR}'")
-
     # saw components configuration
     include_directories (${sawTextToSpeech_INCLUDE_DIR}
                          ${sawRobotIO1394_INCLUDE_DIR}
@@ -89,11 +87,6 @@ if (cisst_FOUND)
                       ${sawControllers_LIBRARY_DIR}
                       ${gattlib_LIBRARY_DIR}
                       ${onnxruntime_LIBRARY_DIR})
-
-     get_property(dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
-     foreach(dir ${dirs})
-     message(ERROR "dir='${dir}'")
-     endforeach()
 
     # create/configure file for find_package (sawIntuitiveResearchKit)
     set (sawIntuitiveResearchKit_INCLUDE_DIR
@@ -187,7 +180,7 @@ if (cisst_FOUND)
          code/robGravityCompensationMTM.h
          code/mtsNeuralForceEstimation.cpp
          )
-    
+
     add_library (sawIntuitiveResearchKit
                  ${HEADER_FILES} ${SOURCE_FILES}
                  ${sawIntuitiveResearchKit_CISST_DG_SRCS}
