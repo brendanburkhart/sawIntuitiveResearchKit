@@ -179,10 +179,13 @@ void mtsTeleOperationPSM::Init(void)
     mPSM.m_jaw_servo_jp.Goal().SetSize(1);
 
     this->StateTable.AddData(mMTM.m_measured_cp, "MTM/measured_cp");
+    this->StateTable.AddData(mMTM.m_initial_cp, "MTM/initial_cp");
     this->StateTable.AddData(mMTM.m_measured_cv, "MTM/measured_cv");
     this->StateTable.AddData(mMTM.m_spatial_measured_cf, "MTM/spatial_measured_cf");
     this->StateTable.AddData(mMTM.m_setpoint_cp, "MTM/setpoint_cp");
+    this->StateTable.AddData(mMTM.m_setpoint_cp, "MTM/setpoint_cp");
     this->StateTable.AddData(mPSM.m_measured_cp, "PSM/measured_cp");
+    this->StateTable.AddData(mPSM.m_initial_cp, "PSM/initial_cp");
     this->StateTable.AddData(mPSM.m_measured_cv, "PSM/measured_cv");
     this->StateTable.AddData(mPSM.m_spatial_measured_cf, "PSM/spatial_measured_cf");
     this->StateTable.AddData(mPSM.m_setpoint_cp, "PSM/setpoint_cp");
@@ -262,6 +265,14 @@ void mtsTeleOperationPSM::Init(void)
         mInterface->AddCommandReadState(this->StateTable,
                                         m_alignment_offset,
                                         "alignment_offset");
+
+        mInterface->AddCommandReadState(this->StateTable,
+                                        mMTM.m_initial_cp,
+                                        "MTM/initial/measured_cp");
+
+        mInterface->AddCommandReadState(this->StateTable,
+                                        mPSM.m_initial_cp,
+                                        "PSM/initial/measured_cp");
         // events
         mInterface->AddEventWrite(MessageEvents.desired_state,
                                   "desired_state", std::string(""));
@@ -606,7 +617,10 @@ vctMatRot3 mtsTeleOperationPSM::UpdateAlignOffset(void)
 void mtsTeleOperationPSM::UpdateInitialState(void)
 {
     mMTM.CartesianInitial.From(mMTM.m_measured_cp.Position());
+    mMTM.m_initial_cp = mMTM.m_measured_cp;
     mPSM.CartesianInitial.From(mPSM.m_setpoint_cp.Position());
+    mPSM.m_initial_cp = mPSM.m_setpoint_cp;
+
     UpdateAlignOffset();
     m_alignment_offset_initial = m_alignment_offset;
     if (mBaseFrame.measured_cp.IsValid()) {
@@ -1033,7 +1047,7 @@ void mtsTeleOperationPSM::RunEnabled(void)
         return;
     }
 
-    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM, m_alignment_offset_initial, m_scale, m_scale);
+    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM, m_alignment_offset_initial, m_scale, 1.0);
     mMTM.m_servo_cpvf = mMTM.computeGoalFromTarget(&mPSM, m_alignment_offset_initial.Inverse(), 1.0 / m_scale, 1.0);
 
     mMTM.servo_cpvf(mMTM.m_servo_cpvf);

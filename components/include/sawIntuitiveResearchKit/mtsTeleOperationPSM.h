@@ -125,6 +125,8 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
 
         vctFrm4x4 CartesianInitial;
 
+        prmPositionCartesianGet m_initial_cp;
+
         prmPositionCartesianGet m_measured_cp;
         prmVelocityCartesianGet m_measured_cv;
         prmForceCartesianGet    m_spatial_measured_cf;

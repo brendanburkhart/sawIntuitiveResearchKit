@@ -305,6 +305,9 @@ void mtsIntuitiveResearchKitArm::Init(void)
     m_kin_measured_js.SetAutomaticTimestamp(false); // keep PID timestamp
     this->StateTable.AddData(m_kin_measured_js, "kin/measured_js");
 
+    m_kin_error_js.SetAutomaticTimestamp(false); // keep PID timestamp
+    this->StateTable.AddData(m_kin_error_js, "kin/error_js");
+
     m_kin_setpoint_js.SetAutomaticTimestamp(false); // keep PID timestamp
     this->StateTable.AddData(m_kin_setpoint_js, "kin/setpoint_js");
 
@@ -315,6 +318,7 @@ void mtsIntuitiveResearchKitArm::Init(void)
         PIDInterface->AddFunction("EnableJoints", PID.EnableJoints);
         PIDInterface->AddFunction("Enabled", PID.Enabled);
         PIDInterface->AddFunction("measured_js", PID.measured_js);
+        PIDInterface->AddFunction("error_state/measured_js", PID.error_js);
         PIDInterface->AddFunction("setpoint_js", PID.setpoint_js);
         PIDInterface->AddFunction("servo_jp", PID.servo_jp);
         PIDInterface->AddFunction("feed_forward_jf", PID.feed_forward_jf);
@@ -901,14 +905,29 @@ void mtsIntuitiveResearchKitArm::get_robot_data(void)
             m_pid_setpoint_js.SetValid(false);
         }
 
+        // disturbance/error state
+        executionResult = PID.error_js(m_pid_error_js);
+        if (executionResult.IsOK()) {
+            m_pid_error_js.SetValid(true);
+        } else {
+            CMN_LOG_CLASS_RUN_ERROR << GetName() << ": get_robot_data: call to PID.error_js failed \""
+                                    << executionResult << "\"" << std::endl;
+            m_pid_error_js.SetValid(false);
+        }
+
         // apply coupling if needed
         if (m_has_coupling) {
             m_pid_measured_js.Position() = m_coupling.ActuatorToJointPosition() * m_pid_measured_js.Position();
             m_pid_measured_js.Velocity() = m_coupling.ActuatorToJointPosition() * m_pid_measured_js.Velocity();
             m_pid_measured_js.Effort() = m_coupling.ActuatorToJointEffort() * m_pid_measured_js.Effort();
+
             m_pid_setpoint_js.Position() = m_coupling.ActuatorToJointPosition() * m_pid_setpoint_js.Position();
             m_pid_setpoint_js.Velocity() = m_coupling.ActuatorToJointPosition() * m_pid_setpoint_js.Velocity();
             m_pid_setpoint_js.Effort() = m_coupling.ActuatorToJointEffort() * m_pid_setpoint_js.Effort();
+
+            m_pid_error_js.Position() = m_coupling.ActuatorToJointPosition() * m_pid_error_js.Position();
+            m_pid_error_js.Velocity() = m_coupling.ActuatorToJointPosition() * m_pid_error_js.Velocity();
+            m_pid_error_js.Effort() = m_coupling.ActuatorToJointEffort() * m_pid_error_js.Effort();
         }
 
         // update joint states used for kinematics
@@ -993,8 +1012,8 @@ void mtsIntuitiveResearchKitArm::get_robot_data(void)
         m_spatial_jacobian_transpose.Assign(m_spatial_jacobian.Transpose());
         nmrPInverse(m_spatial_jacobian_transpose, m_jacobian_transpose_pinverse_data);
 
-        auto external_joint_forces = estimateExternalForces(m_kin_measured_js.Effort(), m_kin_measured_js.Position(), m_kin_measured_js.Velocity());
-
+        auto measured_joint_efforts = m_kin_error_js.Effort(); // use disturbance observer instead of current-based torque measurement
+        auto external_joint_forces = estimateExternalForces(measured_joint_efforts, m_kin_measured_js.Position(), m_kin_measured_js.Velocity());
         wrench.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), external_joint_forces);
         vctDouble6 spatial_wrench;
         spatial_wrench.Assign(wrench);
@@ -1073,6 +1092,7 @@ void mtsIntuitiveResearchKitArm::UpdateStateJointKinematics(void)
 {
     m_kin_measured_js = m_pid_measured_js;
     m_kin_setpoint_js = m_pid_setpoint_js;
+    m_kin_error_js = m_pid_error_js;
 }
 
 void mtsIntuitiveResearchKitArm::ToJointsPID(const vctDoubleVec & jointsKinematics, vctDoubleVec & jointsPID)
@@ -1517,6 +1537,9 @@ void mtsIntuitiveResearchKitArm::control_servo_cpvf(void)
 
     // copy current position
     vctDoubleVec jp(m_kin_measured_js.Position());
+
+    m_servo_cpvf.Position().Rotation().From(m_setpoint_cp.Position().Rotation());
+    m_servo_cpvf.Velocity().Ref<3>(3).Zeros();
 
     // compute desired arm position
     CartesianPositionFrm.From(m_servo_cpvf.Position());

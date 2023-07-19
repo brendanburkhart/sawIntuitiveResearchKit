@@ -273,6 +273,7 @@ class CISST_EXPORT mtsIntuitiveResearchKitArm: public mtsTaskPeriodic
         mtsFunctionWrite EnableJoints;
         mtsFunctionRead  Enabled;
         mtsFunctionRead  measured_js;
+        mtsFunctionRead  error_js;
         mtsFunctionRead  setpoint_js;
         mtsFunctionWrite servo_jp;
         mtsFunctionWrite feed_forward_jf;
@@ -342,8 +343,10 @@ class CISST_EXPORT mtsIntuitiveResearchKitArm: public mtsTaskPeriodic
     prmForceTorqueJointSet m_pid_feed_forward_servo_jf;
     prmStateJoint
         m_pid_measured_js,
+        m_pid_error_js,
         m_pid_setpoint_js,
         m_kin_measured_js,
+        m_kin_error_js,
         m_kin_setpoint_js,
         m_gravity_compensation_setpoint_js;
     prmConfigurationJoint m_pid_configuration_js, m_kin_configuration_js;

@@ -38,7 +38,7 @@ CMN_IMPLEMENT_SERVICES_DERIVED_ONEARG(mtsIntuitiveResearchKitPSM, mtsTaskPeriodi
 mtsIntuitiveResearchKitPSM::mtsIntuitiveResearchKitPSM(const std::string & componentName, const double periodInSeconds):
     mtsIntuitiveResearchKitArm(componentName, periodInSeconds),
     mToolList(*this),
-    mForceEstimation("/home/bburkha4/catkin_ws/src/dvrk-ros/dvrk_python/scripts/psm_force_estimation.onnx")
+    mForceEstimation("/home/bburkha4/catkin_ws/src/dvrk-ros/dvrk_python/scripts/models/psm_force_estimation.onnx")
 {
     Init();
 }
@@ -46,7 +46,7 @@ mtsIntuitiveResearchKitPSM::mtsIntuitiveResearchKitPSM(const std::string & compo
 mtsIntuitiveResearchKitPSM::mtsIntuitiveResearchKitPSM(const mtsTaskPeriodicConstructorArg & arg):
     mtsIntuitiveResearchKitArm(arg),
     mToolList(*this),
-    mForceEstimation("/home/bburkha4/catkin_ws/src/dvrk-ros/dvrk_python/scripts/psm_force_estimation.onnx")
+    mForceEstimation("/home/bburkha4/catkin_ws/src/dvrk-ros/dvrk_python/scripts/models/psm_force_estimation.onnx")
 {
     Init();
 }
@@ -438,6 +438,11 @@ void mtsIntuitiveResearchKitPSM::UpdateStateJointKinematics(void)
         m_kin_setpoint_js.Timestamp() = m_pid_setpoint_js.Timestamp();
         m_kin_setpoint_js.Valid() = m_pid_setpoint_js.Valid();
 
+        m_kin_error_js.Position().Assign(m_pid_error_js.Position().Ref(number_of_joints_kinematics()));
+        m_kin_error_js.Velocity().Assign(m_pid_error_js.Velocity().Ref(number_of_joints_kinematics()));
+        m_kin_error_js.Effort().Assign(m_pid_error_js.Effort().Ref(number_of_joints_kinematics()));
+        m_kin_error_js.Timestamp() = m_pid_error_js.Timestamp();
+        m_kin_error_js.Valid() = m_pid_error_js.Valid();
     } else {
 
         // measured p/v/e
@@ -1187,6 +1192,10 @@ void mtsIntuitiveResearchKitPSM::EnterToolEngaged(void)
     m_kin_setpoint_js.Position().SetSize(number_of_joints_kinematics());
     m_kin_setpoint_js.Velocity().SetSize(number_of_joints_kinematics());
     m_kin_setpoint_js.Effort().SetSize(number_of_joints_kinematics());
+    m_kin_error_js.Name().ForceAssign(m_kin_configuration_js.Name());
+    m_kin_error_js.Position().SetSize(number_of_joints_kinematics());
+    m_kin_error_js.Velocity().SetSize(number_of_joints_kinematics());
+    m_kin_error_js.Effort().SetSize(number_of_joints_kinematics());
     // jaw
     m_jaw_measured_js.Name().ForceAssign(m_jaw_configuration_js.Name());
     m_jaw_measured_js.Position().SetSize(1);
@@ -1591,10 +1600,11 @@ void mtsIntuitiveResearchKitPSM::EventHandlerToolType(const std::string & toolTy
 }
 
 vctDoubleVec mtsIntuitiveResearchKitPSM::estimateExternalForces(const vctDoubleVec& totalForces, const vctDoubleVec& jp, const vctDoubleVec& jv) {
-    vctDoubleVec dynamics = mForceEstimation.infer_jf(jp.Ref(3), jv.Ref(3));
     vctDoubleVec output(totalForces.size());
     output.Assign(totalForces);
-    output.Ref(3).Subtract(dynamics);
+
+    // vctDoubleVec dynamics = mForceEstimation.infer_jf(jp.Ref(3), jv.Ref(3));
+    // output.Ref(3).Subtract(dynamics);
 
     return output;
 }

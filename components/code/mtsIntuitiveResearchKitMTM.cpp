@@ -36,13 +36,15 @@ http://www.cisst.org/cisst/license.txt.
 CMN_IMPLEMENT_SERVICES_DERIVED_ONEARG(mtsIntuitiveResearchKitMTM, mtsTaskPeriodic, mtsTaskPeriodicConstructorArg);
 
 mtsIntuitiveResearchKitMTM::mtsIntuitiveResearchKitMTM(const std::string & componentName, const double periodInSeconds):
-    mtsIntuitiveResearchKitArm(componentName, periodInSeconds)
+    mtsIntuitiveResearchKitArm(componentName, periodInSeconds),
+    mForceEstimation("/home/bburkha4/catkin_ws/src/dvrk-ros/dvrk_python/scripts/models/psm_force_estimation.onnx")
 {
     Init();
 }
 
 mtsIntuitiveResearchKitMTM::mtsIntuitiveResearchKitMTM(const mtsTaskPeriodicConstructorArg & arg):
-    mtsIntuitiveResearchKitArm(arg)
+    mtsIntuitiveResearchKitArm(arg),
+    mForceEstimation("/home/bburkha4/catkin_ws/src/dvrk-ros/dvrk_python/scripts/models/psm_force_estimation.onnx")
 {
     Init();
 }
@@ -276,7 +278,7 @@ robManipulator::Errno mtsIntuitiveResearchKitMTM::InverseKinematics(vctDoubleVec
         // should move.  the projection angle is +/- q5 based on q4.  we
         // also scale the increment based on cos(q[4]) so increment is
         // null if roll axis is perpendicular to platform
-        jointSet[3] += jointSet[5] * cos(jointSet[4]);
+        jointSet[3] = 0.0; //+= jointSet[5] * cos(jointSet[4]);
 
         // make sure we respect joint limits
         const double q3Max = Manipulator->links[3].GetKinematics()->PositionMax();
@@ -711,4 +713,14 @@ void mtsIntuitiveResearchKitMTM::gravity_compensation(vctDoubleVec & efforts)
                                                               m_kin_measured_js.Velocity(),
                                                               efforts);
     }
+}
+
+vctDoubleVec mtsIntuitiveResearchKitMTM::estimateExternalForces(const vctDoubleVec& totalForces, const vctDoubleVec& jp, const vctDoubleVec& jv) {
+    vctDoubleVec output(totalForces.size());
+    output.Assign(totalForces);
+
+    // vctDoubleVec dynamics = mForceEstimation.infer_jf(jp.Ref(3), jv.Ref(3));
+    // output.Ref(3).Subtract(dynamics);
+
+    return output;
 }

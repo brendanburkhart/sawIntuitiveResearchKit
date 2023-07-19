@@ -21,6 +21,7 @@ http://www.cisst.org/cisst/license.txt.
 #define _mtsIntuitiveResearchKitMTM_h
 
 #include <sawIntuitiveResearchKit/mtsIntuitiveResearchKitArm.h>
+#include <sawIntuitiveResearchKit/mtsNeuralForceEstimation.h>
 
 // Always include last
 #include <sawIntuitiveResearchKit/sawIntuitiveResearchKitExport.h>
@@ -145,6 +146,9 @@ protected:
     robGravityCompensationMTM * GravityCompensationMTM = 0;
 
     double m_platform_gain = mtsIntuitiveResearchKit::MTMPlatform::Gain;
+
+    mtsNeuralForceEstimation mForceEstimation;
+    vctDoubleVec estimateExternalForces(const vctDoubleVec& totalForces, const vctDoubleVec& jp, const vctDoubleVec& jv) override;
 };
 
 CMN_DECLARE_SERVICES_INSTANTIATION(mtsIntuitiveResearchKitMTM);

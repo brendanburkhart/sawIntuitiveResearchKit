@@ -82,5 +82,4 @@ vctDoubleVec mtsNeuralForceEstimation::infer_jf(const vctDoubleVec& jp, const vc
         std::cout << "ERROR running model inference: " << exception.what() << std::endl;
         exit(-1);
     }
-
 }

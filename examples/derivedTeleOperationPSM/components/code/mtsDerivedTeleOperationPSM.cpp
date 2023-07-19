@@ -97,7 +97,7 @@ void mtsDerivedTeleOperationPSM::RunEnabled(void)
     BaseType::RunEnabled();
 
     // Only if the PSM is following
-    if (m_following) {
+    if (true /*m_following*/) {
         // Get estimated wrench and velocity from PSM
         PSMExtra.body_measured_cf(PSMExtra.m_measured_cf);
         PSMExtra.measured_cv(PSMExtra.m_measured_cv);
