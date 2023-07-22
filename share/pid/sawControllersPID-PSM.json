@@ -7,11 +7,11 @@
 	    "p_gain": 200.0,
 	    "d_gain": 12.0,
 	    "i_gain": 0.0,
-		"use_disturbance_observer": true,
+		"use_disturbance_observer": false,
 	    "nominal_mass": 0.001,
-	    "disturbance_cutoff": 10.0,
+	    "disturbance_cutoff": 20.0,
 	    "effort_low_pass_cutoff_frequency": 40,
-	    "f_gain": 1.0
+	    "f_gain": 0.5
 	}
 	,
 	{
@@ -21,11 +21,11 @@
 	    "p_gain": 200.0,
 	    "d_gain": 8.0,
 	    "i_gain": 0.0,
-		"use_disturbance_observer": true,
+		"use_disturbance_observer": false,
 	    "nominal_mass": 0.001,
-	    "disturbance_cutoff": 10.0,
+	    "disturbance_cutoff": 20.0,
 	    "effort_low_pass_cutoff_frequency": 40,
-	    "f_gain": 1.0
+	    "f_gain": 0.5
 	}
 	,
 	{
@@ -35,11 +35,11 @@
 	    "p_gain": 8000.0,
 	    "d_gain": 300.0,
 	    "i_gain": 0.0,
-		"use_disturbance_observer": true,
+		"use_disturbance_observer": false,
 	    "nominal_mass": 0.001,
-	    "disturbance_cutoff": 10.0,
+	    "disturbance_cutoff": 20.0,
 	    "effort_low_pass_cutoff_frequency": 40,
-	    "f_gain": 1.0
+	    "f_gain": 0.5
 	}
 	,
 	{
@@ -51,7 +51,7 @@
 	    "i_gain": 0.0,
 		"use_disturbance_observer": false,
 	    "nominal_mass": 0.0001,
-	    "disturbance_cutoff": 5.0,
+	    "disturbance_cutoff": 20.0,
 	    "effort_low_pass_cutoff_frequency": 10,
 	    "f_gain": 0.0
 	}
@@ -64,8 +64,8 @@
 	    "d_gain": 0.09,
 	    "i_gain": 0.0,
 		"use_disturbance_observer": false,
-	    "nominal_mass": 0.0001,
-	    "disturbance_cutoff": 5.0,
+	    "nominal_mass": 0.00002,
+	    "disturbance_cutoff": 20.0,
 	    "effort_low_pass_cutoff_frequency": 20,
 	    "f_gain": 0.0
 	}
@@ -78,8 +78,8 @@
 	    "d_gain": 0.09,
 	    "i_gain": 0.0,
 		"use_disturbance_observer": false,
-	    "nominal_mass": 0.0001,
-	    "disturbance_cutoff": 5.0,
+	    "nominal_mass": 0.00002,
+	    "disturbance_cutoff": 20.0,
 	    "effort_low_pass_cutoff_frequency": 20,
 	    "f_gain": 0.0
 	}

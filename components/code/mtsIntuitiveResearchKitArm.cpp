@@ -221,6 +221,9 @@ void mtsIntuitiveResearchKitArm::Init(void)
     m_measured_cv.SetVelocityLinear(vct3(0.0));
     m_measured_cv.SetVelocityAngular(vct3(0.0));
     m_measured_cv.SetValid(false);
+    m_spatial_measured_cv.SetVelocityLinear(vct3(0.0));
+    m_spatial_measured_cv.SetVelocityAngular(vct3(0.0));
+    m_spatial_measured_cv.SetValid(false);
 
     m_local_setpoint_cv.SetVelocityLinear(vct3(0.0));
     m_local_setpoint_cv.SetVelocityAngular(vct3(0.0));
@@ -285,6 +288,11 @@ void mtsIntuitiveResearchKitArm::Init(void)
     m_measured_cv.SetMovingFrame(GetName());
     m_measured_cv.SetReferenceFrame(GetName() + "_base");
     this->StateTable.AddData(m_measured_cv, "measured_cv");
+
+    m_spatial_measured_cv.SetAutomaticTimestamp(false); // keep PID timestamp
+    m_spatial_measured_cv.SetMovingFrame(GetName());
+    m_spatial_measured_cv.SetReferenceFrame(GetName() + "_base");
+    this->StateTable.AddData(m_spatial_measured_cv, "spatial/measured_cv");
 
     m_local_setpoint_cv.SetAutomaticTimestamp(false); // keep PID timestamp
     m_local_setpoint_cv.SetMovingFrame(GetName());
@@ -369,6 +377,7 @@ void mtsIntuitiveResearchKitArm::Init(void)
         m_arm_interface->AddCommandReadState(this->StateTable, m_local_measured_cv, "local/measured_cv");
         m_arm_interface->AddCommandReadState(this->StateTable, m_local_setpoint_cv, "local/setpoint_cv");
         m_arm_interface->AddCommandReadState(this->StateTable, m_measured_cv, "measured_cv");
+        m_arm_interface->AddCommandReadState(this->StateTable, m_spatial_measured_cv, "spatial/measured_cv");
         m_arm_interface->AddCommandReadState(this->StateTable, m_setpoint_cv, "setpoint_cv");
         m_arm_interface->AddCommandReadState(this->StateTable, m_body_measured_cf, "body/measured_cf");
         m_arm_interface->AddCommandReadState(this->StateTable, m_body_jacobian, "body/jacobian");
@@ -964,8 +973,8 @@ void mtsIntuitiveResearchKitArm::get_robot_data(void)
         m_measured_cp.SetValid(m_base_frame_valid);
 
         // update jacobians
-        Manipulator->JacobianSpatial(m_kin_measured_js.Position(), m_spatial_jacobian);
         Manipulator->JacobianBody(m_kin_measured_js.Position(), m_body_jacobian);
+        Manipulator->JacobianSpatial(m_kin_measured_js.Position(), m_spatial_jacobian);
 
         // update cartesian velocity using the jacobian and joint
         // velocities.
@@ -988,22 +997,36 @@ void mtsIntuitiveResearchKitArm::get_robot_data(void)
         m_measured_cv.SetValid(true);
         m_measured_cv.SetTimestamp(m_kin_measured_js.Timestamp());
 
+        cartesianVelocity.Zeros();
+        cartesianVelocity.ProductOf(m_spatial_jacobian, m_kin_measured_js.Velocity());
+        // linear
+        relative.Assign(cartesianVelocity.Ref(3, 0));
+        m_base_frame.Rotation().ApplyTo(relative, absolute);
+        m_spatial_measured_cv.SetVelocityLinear(absolute);
+        // angular
+        relative.Assign(cartesianVelocity.Ref(3, 3));
+        m_base_frame.Rotation().ApplyTo(relative, absolute);
+        m_spatial_measured_cv.SetVelocityAngular(absolute);
+        // valid/timestamp
+        m_spatial_measured_cv.SetValid(true);
+        m_spatial_measured_cv.SetTimestamp(m_kin_measured_js.Timestamp());
+
         // update wrench based on measured joint current efforts
         m_body_jacobian_transpose.Assign(m_body_jacobian.Transpose());
         nmrPInverse(m_body_jacobian_transpose, m_jacobian_transpose_pinverse_data);
-        vctDoubleVec wrench(6);
-        wrench.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), m_kin_measured_js.Effort());
-        if (m_body_cf_orientation_absolute) {
+        vctDoubleVec force(6);
+        force.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), m_kin_measured_js.Effort());
+        if (true/*m_body_cf_orientation_absolute*/) {
             // forces
-            relative.Assign(wrench.Ref(3, 0));
+            relative.Assign(force.Ref(3, 0));
             m_measured_cp_frame.Rotation().ApplyTo(relative, absolute);
             m_body_measured_cf.Force().Ref<3>(0).Assign(absolute);
             // torques
-            relative.Assign(wrench.Ref(3, 3));
+            relative.Assign(force.Ref(3, 3));
             m_measured_cp_frame.Rotation().ApplyTo(relative, absolute);
             m_body_measured_cf.Force().Ref<3>(3).Assign(absolute);
         } else {
-            m_body_measured_cf.Force().Assign(wrench);
+            m_body_measured_cf.Force().Assign(force);
         }
         // valid/timestamp
         m_body_measured_cf.SetValid(true);
@@ -1012,13 +1035,13 @@ void mtsIntuitiveResearchKitArm::get_robot_data(void)
         m_spatial_jacobian_transpose.Assign(m_spatial_jacobian.Transpose());
         nmrPInverse(m_spatial_jacobian_transpose, m_jacobian_transpose_pinverse_data);
 
-        auto measured_joint_efforts = m_kin_error_js.Effort(); // use disturbance observer instead of current-based torque measurement
+        auto measured_joint_efforts = m_kin_measured_js.Effort(); // use disturbance observer instead of current-based torque measurement
         auto external_joint_forces = estimateExternalForces(measured_joint_efforts, m_kin_measured_js.Position(), m_kin_measured_js.Velocity());
-        wrench.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), external_joint_forces);
-        vctDouble6 spatial_wrench;
-        spatial_wrench.Assign(wrench);
-        m_spatial_measured_cf.Force().Ref<3>(0).ProductOf(m_base_frame.Rotation(), spatial_wrench.Ref<3>(0));
-        m_spatial_measured_cf.Force().Ref<3>(3).ProductOf(m_base_frame.Rotation(), spatial_wrench.Ref<3>(3));
+        force.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), measured_joint_efforts);
+        vctDouble6 spatial_force;
+        spatial_force.Assign(force);
+        m_spatial_measured_cf.Force().Ref<3>(0).ProductOf(m_base_frame.Rotation(), spatial_force.Ref<3>(0));
+        m_spatial_measured_cf.Force().Ref<3>(3).ProductOf(m_base_frame.Rotation(), spatial_force.Ref<3>(3));
         // valid/timestamp
         m_spatial_measured_cf.SetValid(true);
         m_spatial_measured_cf.SetTimestamp(m_kin_measured_js.Timestamp());
@@ -1073,6 +1096,7 @@ void mtsIntuitiveResearchKitArm::get_robot_data(void)
         // velocities and wrench
         m_local_measured_cv.SetValid(false);
         m_measured_cv.SetValid(false);
+        m_spatial_measured_cv.SetValid(false);
         m_body_measured_cf.SetValid(false);
         m_spatial_measured_cf.SetValid(false);
         // update cartesian position desired
@@ -1538,9 +1562,6 @@ void mtsIntuitiveResearchKitArm::control_servo_cpvf(void)
     // copy current position
     vctDoubleVec jp(m_kin_measured_js.Position());
 
-    m_servo_cpvf.Position().Rotation().From(m_setpoint_cp.Position().Rotation());
-    m_servo_cpvf.Velocity().Ref<3>(3).Zeros();
-
     // compute desired arm position
     CartesianPositionFrm.From(m_servo_cpvf.Position());
 
@@ -1557,58 +1578,24 @@ void mtsIntuitiveResearchKitArm::control_servo_cpvf(void)
         return;
     }
 
-    // update the body jacobian pseudo inverse
-    nmrPInverse(m_body_jacobian, m_jacobian_pinverse_data);
-
     // compute velocities
     vctDoubleVec jv(number_of_joints_kinematics());
     if (m_servo_cpvf.VelocityIsDefined()) {
-        vctDoubleVec cv(6);
-        // linear
-        cv.Ref(3) = m_measured_cp_frame.Rotation().ApplyInverseTo(m_servo_cpvf.Velocity().Ref<3>(0));
-        // angular
-        cv.Ref(3, 3) = m_measured_cp_frame.Rotation().ApplyInverseTo(m_servo_cpvf.Velocity().Ref<3>(3));
-        jv.ProductOf(m_jacobian_pinverse_data.PInverse(), cv);
+        jv.Assign(cartesianToJointVelocities(m_servo_cpvf.Velocity()));
     } else {
         jv.Zeros();
     }
 
     vctDoubleVec jf(number_of_joints_kinematics());
     if (m_servo_cpvf.EffortIsDefined()) {
-        // compute joint forces from cartesian wrench using spatial jacobian
-        vctDouble6 wrench;
-        wrench.Assign(m_servo_cpvf.Effort());
-        vctDouble6 relative_wrench;
-        relative_wrench.Ref<3>(0).ProductOf(m_base_frame.Rotation().Transpose(), wrench.Ref<3>(0));
-        relative_wrench.Ref<3>(3).ProductOf(m_base_frame.Rotation().Transpose(), wrench.Ref<3>(3));
-        vctDoubleVec _wrench(6);
-        _wrench.Assign(relative_wrench);
-        jf.ProductOf(m_spatial_jacobian.Transpose(), _wrench);
+        jf.Assign(cartesianToJointForces(m_servo_cpvf.Effort()));
     } else {
         jf.Zeros();
     }
 
     // send desired position, velocity, effort to PID
     servo_jp_internal(jp, jv);
-
-    // get force preload from derived classes, in most cases it will be zero,
-    // but the MTM uses it for platform control for MTM
-    vctDoubleVec effortPreload(number_of_joints_kinematics());
-    vctDoubleVec wrenchPreload(6);
-    control_servo_cf_preload(effortPreload, wrenchPreload);
-
-    auto feedforward = m_pid_feed_forward_servo_jf.ForceTorque().Ref(number_of_joints_kinematics());
-    feedforward.Zeros();
-    // feedforward.ProductOf(m_spatial_jacobian.Transpose(), wrenchPreload);
-    // feedforward.Add(effortPreload);
-    feedforward.Add(jf);
-
-    int non_kinematic_joints = number_of_joints() - number_of_joints_kinematics();
-    if (non_kinematic_joints > 0) {
-        m_pid_feed_forward_servo_jf.ForceTorque().Ref(non_kinematic_joints, number_of_joints_kinematics()).Zeros();
-    }
-
-    PID.feed_forward_jf(m_pid_feed_forward_servo_jf);
+    feed_forward_jf_internal(jf);
 }
 
 void mtsIntuitiveResearchKitArm::control_move_cp(void)
@@ -1975,6 +1962,16 @@ void mtsIntuitiveResearchKitArm::servo_jf_internal(const vctDoubleVec & jf)
         m_servo_jf_param.ForceTorque() = m_coupling.JointToActuatorEffort() * m_servo_jf_param.ForceTorque();
     }
     PID.servo_jf(m_servo_jf_param);
+}
+
+void mtsIntuitiveResearchKitArm::feed_forward_jf_internal(const vctDoubleVec & jf)
+{
+    if (m_has_coupling) {
+        m_pid_feed_forward_servo_jf.ForceTorque().Assign(m_coupling.JointToActuatorEffort() * jf);
+    }
+
+    m_pid_feed_forward_servo_jf.SetTimestamp(StateTable.GetTic());
+    PID.feed_forward_jf(m_pid_feed_forward_servo_jf);
 }
 
 void mtsIntuitiveResearchKitArm::servo_jp_internal(const vctDoubleVec & jp,
@@ -2380,4 +2377,43 @@ void mtsIntuitiveResearchKitArm::servo_cpvf(const prmStateCartesian & cs)
 
 vctDoubleVec mtsIntuitiveResearchKitArm::estimateExternalForces(const vctDoubleVec& totalForces, const vctDoubleVec& jp, const vctDoubleVec& jv) {
     return totalForces;
+}
+
+vctDoubleVec mtsIntuitiveResearchKitArm::cartesianToJointVelocities(vctDouble6& cartesianVelocity)
+{
+    //auto transform = m_base_frame.Rotation();
+    auto transform = m_measured_cp.Position().Rotation();
+
+    vctDouble6 velocity;
+    velocity.Ref<3>(0) = transform.ApplyInverseTo(cartesianVelocity.Ref<3>(0));
+    velocity.Ref<3>(3) = transform.ApplyInverseTo(cartesianVelocity.Ref<3>(3));
+
+    vctDoubleVec jv(number_of_joints_kinematics());
+
+    // update the spatial jacobian pseudo inverse
+    nmrPInverseDynamicData jacobian_pinverse_data;
+    jacobian_pinverse_data.Allocate(m_body_jacobian);
+    nmrPInverse(m_body_jacobian, jacobian_pinverse_data);
+
+    // compute joint velocities
+    vctDoubleVec v(6);
+    v.Assign(velocity);
+    jv.ProductOf(jacobian_pinverse_data.PInverse(), v);
+
+    return jv;
+}
+
+vctDoubleVec mtsIntuitiveResearchKitArm::cartesianToJointForces(vctDouble6& cartesianForce)
+{
+    //auto transform = m_base_frame.Rotation();
+    auto transform = m_measured_cp.Position().Rotation();
+
+    vctDoubleVec local_force(6);
+    local_force.Ref(3, 0).Assign(transform.ApplyInverseTo(cartesianForce.Ref<3>(0)));
+    local_force.Ref(3, 3).Assign(transform.ApplyInverseTo(cartesianForce.Ref<3>(3)));
+
+    vctDoubleVec jf(number_of_joints_kinematics());
+    jf.ProductOf(m_body_jacobian.Transpose(), local_force);
+
+    return jf;
 }

@@ -9,11 +9,11 @@
 	    "i_gain": 0.0,
 	    "i_forget_rate": 0.99,
 	    "i_limit": 0.0,
-	    "use_disturbance_observer": true,
+	    "use_disturbance_observer": false,
 	    "nominal_mass": 0.001,
-	    "disturbance_cutoff": 10.0,
+	    "disturbance_cutoff": 20.0,
 	    "effort_low_pass_cutoff_frequency": 30,
-	    "f_gain": 1.0
+	    "f_gain": 0.5
 	}
 	,
 	{
@@ -25,11 +25,11 @@
 	    "i_gain": 0.0,
 	    "i_forget_rate": 0.99,
 	    "i_limit": 0.0,
-	    "use_disturbance_observer": true,
+	    "use_disturbance_observer": false,
 	    "nominal_mass": 0.001,
-	    "disturbance_cutoff": 10.0,
+	    "disturbance_cutoff": 20.0,
 	    "effort_low_pass_cutoff_frequency": 30,
-	    "f_gain": 1.0
+	    "f_gain": 0.5
 	}
 	,
 	{
@@ -41,11 +41,11 @@
 	    "i_gain": 0.0,
 	    "i_forget_rate": 0.99,
 	    "i_limit": 0.0,
-	    "use_disturbance_observer": true,
+	    "use_disturbance_observer": false,
 	    "nominal_mass": 0.001,
-	    "disturbance_cutoff": 10.0,
+	    "disturbance_cutoff": 20.0,
 	    "effort_low_pass_cutoff_frequency": 30,
-	    "f_gain": 1.0
+	    "f_gain": 0.5
 	}
 	,
 	{
@@ -58,8 +58,8 @@
 	    "i_forget_rate": 0.99,
 	    "i_limit": 0.0,
 	    "use_disturbance_observer": false,
-	    "nominal_mass": 0.0001,
-	    "disturbance_cutoff": 2.0,
+	    "nominal_mass": 0.00002,
+	    "disturbance_cutoff": 10.0,
 	    "effort_low_pass_cutoff_frequency": 0.01,
 	    "f_gain": 0.0
 	}
@@ -75,8 +75,8 @@
 	    "i_limit": 0.0,
 	    "p_deadband": 0.008,
 	    "use_disturbance_observer": false,
-	    "nominal_mass": 0.0001,
-	    "disturbance_cutoff": 5.0,
+	    "nominal_mass": 0.000005,
+	    "disturbance_cutoff": 20.0,
 	    "effort_low_pass_cutoff_frequency": 20,
 	    "f_gain": 0.0
 	}
@@ -92,8 +92,8 @@
 	    "i_limit": 0.0,
 	    "p_deadband": 0.015,
 	    "use_disturbance_observer": false,
-	    "nominal_mass": 0.0001,
-	    "disturbance_cutoff": 5.0,
+	    "nominal_mass": 0.000005,
+	    "disturbance_cutoff": 20.0,
 	    "effort_low_pass_cutoff_frequency": 20,
 	    "f_gain": 0.0
 	}
@@ -109,8 +109,8 @@
 	    "i_limit": 0.0,
 	    "p_deadband": 0.02,
 	    "use_disturbance_observer": false,
-	    "nominal_mass": 0.0001,
-	    "disturbance_cutoff": 5.0,
+	    "nominal_mass": 0.000005,
+	    "disturbance_cutoff": 20.0,
 	    "effort_low_pass_cutoff_frequency": 1,
 	    "f_gain": 0.0
 	}

@@ -102,20 +102,32 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     void RunEnabled(void); // performs actual teleoperation
     void TransitionEnabled(void); // performs actual teleoperation
 
+    class Result {
+    public:
+        bool ok;
+        std::string message;
+
+        Result() : ok(true), message("") {}
+        Result(bool ok, std::string message, mtsExecutionResult executionResult);
+    };
+
     // Light wrapper around common arm functionality
     class Arm {
     public:
         virtual ~Arm() {};
 
         virtual void populateInterface(mtsInterfaceRequired* interfaceRequired);
-        virtual prmStateCartesian computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset,
-                                                        double size_scale, double force_scale) const;
+        virtual prmStateCartesian computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const;
+
+        virtual Result getData();
 
         mtsFunctionRead  operating_state;
         mtsFunctionWrite state_command;
 
         mtsFunctionRead  measured_cp;
-        mtsFunctionRead  measured_cv;
+        mtsFunctionRead  body_measured_cv;
+        mtsFunctionRead  spatial_measured_cv;
+        mtsFunctionRead  body_measured_cf;
         mtsFunctionRead  spatial_measured_cf;
         mtsFunctionRead  setpoint_cp;
 
@@ -128,7 +140,9 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
         prmPositionCartesianGet m_initial_cp;
 
         prmPositionCartesianGet m_measured_cp;
-        prmVelocityCartesianGet m_measured_cv;
+        prmVelocityCartesianGet m_body_measured_cv;
+        prmVelocityCartesianGet m_spatial_measured_cv;
+        prmForceCartesianGet    m_body_measured_cf;
         prmForceCartesianGet    m_spatial_measured_cf;
         prmPositionCartesianGet m_setpoint_cp;
         prmStateCartesian m_servo_cpvf;
@@ -137,6 +151,9 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     class ArmMTM : public Arm {
     public:
         void populateInterface(mtsInterfaceRequired* interfaceRequired) override;
+        prmStateCartesian computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const override;
+
+        Result getData() override;
 
         mtsFunctionWrite move_cp;
         mtsFunctionRead  gripper_measured_js;
@@ -147,13 +164,14 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
 
         prmPositionCartesianSet m_move_cp;
         prmStateJoint m_gripper_measured_js;
-
-        bool use_measured_cv = false;
     };
 
     class ArmPSM : public Arm {
     public:
         void populateInterface(mtsInterfaceRequired* interfaceRequired) override;
+        prmStateCartesian computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const override;
+
+        Result getData() override;
 
         mtsFunctionVoid  hold;
         mtsFunctionRead  jaw_setpoint_js;
@@ -163,8 +181,6 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
         prmStateJoint m_jaw_setpoint_js;
         prmConfigurationJoint m_jaw_configuration_js;
         prmPositionJointSet m_jaw_servo_jp;
-
-        bool use_measured_cv = false;
     };
 
     ArmMTM mMTM;

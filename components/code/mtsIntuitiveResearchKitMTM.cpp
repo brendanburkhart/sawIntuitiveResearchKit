@@ -671,6 +671,14 @@ void mtsIntuitiveResearchKitMTM::control_servo_cf_preload(vctDoubleVec & effortP
     wrenchPreload.SetAll(0.0);
 }
 
+void mtsIntuitiveResearchKitMTM::control_servo_cpvf(void)
+{
+    // m_servo_cpvf.Position().Rotation().From(m_setpoint_cp.Position().Rotation());
+    // m_servo_cpvf.Velocity().Ref<3>(3).Zeros();
+
+    mtsIntuitiveResearchKitArm::control_servo_cpvf();
+}
+
 void mtsIntuitiveResearchKitMTM::lock_orientation(const vctMatRot3 & orientation)
 {
     // if we just started lock
@@ -704,7 +712,6 @@ void mtsIntuitiveResearchKitMTM::unlock_orientation(void)
     mtm_events.orientation_locked(m_effort_orientation_locked);
 }
 
-
 void mtsIntuitiveResearchKitMTM::gravity_compensation(vctDoubleVec & efforts)
 {
     efforts.SetAll(0.0);
@@ -723,4 +730,63 @@ vctDoubleVec mtsIntuitiveResearchKitMTM::estimateExternalForces(const vctDoubleV
     // output.Ref(3).Subtract(dynamics);
 
     return output;
+}
+
+vctDoubleVec mtsIntuitiveResearchKitMTM::cartesianToJointVelocities(vctDouble6& cartesianVelocity)
+{
+    return mtsIntuitiveResearchKitArm::cartesianToJointVelocities(cartesianVelocity);
+    // vctDouble6 body_velocity;
+    // // linear
+    // body_velocity.Ref<3>(0) = m_measured_cp_frame.Rotation().ApplyInverseTo(cartesianVelocity.Ref<3>(0));
+    // // angular
+    // body_velocity.Ref<3>(3) = m_measured_cp_frame.Rotation().ApplyInverseTo(cartesianVelocity.Ref<3>(3));
+
+    // vctDoubleVec _jv(number_of_joints_kinematics()-1);
+
+    // vctDoubleMat jacobian(6, number_of_joints_kinematics() - 1);
+    // jacobian.Column(0).Assign(m_body_jacobian.Column(0));
+    // jacobian.Column(1).Assign(m_body_jacobian.Column(1));
+    // jacobian.Column(2).Assign(m_body_jacobian.Column(2));
+    // jacobian.Column(3).Assign(m_body_jacobian.Column(4));
+    // jacobian.Column(4).Assign(m_body_jacobian.Column(5));
+    // jacobian.Column(5).Assign(m_body_jacobian.Column(6));
+
+    // nmrPInverseDynamicData jacobian_pinverse_data;
+    // jacobian_pinverse_data.Allocate(jacobian);
+    // nmrPInverse(jacobian, jacobian_pinverse_data);
+
+    // // compute joint velocities
+    // vctDoubleVec v(6);
+    // v.Assign(body_velocity);
+    // _jv.ProductOf(jacobian_pinverse_data.PInverse(), v);
+
+    // vctDoubleVec jv(number_of_joints_kinematics());
+    // jv[0] = _jv[0];
+    // jv[1] = _jv[1];
+    // jv[2] = _jv[2];
+    // jv[3] = 0.0;
+    // jv[4] = _jv[3];
+    // jv[5] = _jv[4];
+    // jv[6] = _jv[5];
+
+    // return jv;
+}
+
+vctDoubleVec mtsIntuitiveResearchKitMTM::cartesianToJointForces(vctDouble6& cartesianForce)
+{
+    return mtsIntuitiveResearchKitArm::cartesianToJointForces(cartesianForce);
+    // vctDouble6 local_wrench;
+    // local_wrench.Ref<3>(0).ProductOf(m_base_frame.Rotation().Transpose(), cartesianForce.Ref<3>(0));
+    // local_wrench.Ref<3>(3).ProductOf(m_base_frame.Rotation().Transpose(), cartesianForce.Ref<3>(3));
+
+    // vctDoubleVec _local_wrench(6);
+    // _local_wrench.Assign(local_wrench);
+
+    // vctDoubleVec jf(number_of_joints_kinematics());
+    // jf.ProductOf(m_spatial_jacobian.Transpose(), _local_wrench);
+
+    // // don't apply force to setup/platform joint
+    // jf[JNT_SETUP_JNT] = 0.0;
+
+    // return jf;
 }

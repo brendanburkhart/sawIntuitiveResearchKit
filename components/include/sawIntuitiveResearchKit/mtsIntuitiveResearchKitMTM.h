@@ -112,6 +112,8 @@ protected:
     void SetControlEffortActiveJoints(void) override;
     void control_servo_cf_preload(vctDoubleVec & effortPreload,
                                   vctDoubleVec & wrenchPreload) override;
+    
+    void control_servo_cpvf(void) override;
 
     /*! Lock master orientation when in cartesian effort mode */
     virtual void lock_orientation(const vctMatRot3 & orientation);
@@ -149,6 +151,8 @@ protected:
 
     mtsNeuralForceEstimation mForceEstimation;
     vctDoubleVec estimateExternalForces(const vctDoubleVec& totalForces, const vctDoubleVec& jp, const vctDoubleVec& jv) override;
+    vctDoubleVec cartesianToJointVelocities(vctDouble6& cartesianVelocity) override;
+    vctDoubleVec cartesianToJointForces(vctDouble6& cartesianForce) override;
 };
 
 CMN_DECLARE_SERVICES_INSTANTIATION(mtsIntuitiveResearchKitMTM);

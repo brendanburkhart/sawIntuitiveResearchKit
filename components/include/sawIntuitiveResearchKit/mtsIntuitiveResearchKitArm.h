@@ -180,6 +180,7 @@ class CISST_EXPORT mtsIntuitiveResearchKitArm: public mtsTaskPeriodic
     virtual void servo_jp_internal(const vctDoubleVec & jp,
                                    const vctDoubleVec & jv);
     virtual void servo_jf_internal(const vctDoubleVec & jf);
+    virtual void feed_forward_jf_internal(const vctDoubleVec & jf);
     inline virtual void update_feed_forward(vctDoubleVec & CMN_UNUSED(feedForward)) {};
 
     /*! Methods used for commands */
@@ -381,7 +382,7 @@ class CISST_EXPORT mtsIntuitiveResearchKitArm: public mtsTaskPeriodic
 
     // Velocities
     prmVelocityCartesianGet
-        m_local_measured_cv, m_measured_cv,
+        m_local_measured_cv, m_measured_cv, m_spatial_measured_cv,
         m_local_setpoint_cv, m_setpoint_cv;
     vctFrm4x4 CartesianPositionFrm;
 
@@ -494,6 +495,8 @@ class CISST_EXPORT mtsIntuitiveResearchKitArm: public mtsTaskPeriodic
                                           vctDoubleVec & wrenchPreload);
 
     virtual vctDoubleVec estimateExternalForces(const vctDoubleVec& totalForces, const vctDoubleVec& jp, const vctDoubleVec& jv);
+    virtual vctDoubleVec cartesianToJointVelocities(vctDouble6& cartesianVelocity);
+    virtual vctDoubleVec cartesianToJointForces(vctDouble6& cartesianForce);
 
     struct {
         robReflexxes Reflexxes;

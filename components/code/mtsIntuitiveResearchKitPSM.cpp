@@ -1354,6 +1354,31 @@ void mtsIntuitiveResearchKitPSM::jaw_servo_jf(const prmForceTorqueJointSet & eff
     m_jaw_servo_jf = effort.ForceTorque().at(0);
 }
 
+void mtsIntuitiveResearchKitPSM::feed_forward_jf_internal(const vctDoubleVec & jf)
+{
+    // pad array for PID
+    vctDoubleVec torqueDesired(number_of_joints(), 0.0); // for PID
+
+    if (m_snake_like) {
+        std::cerr << CMN_LOG_DETAILS << " need to convert 8 joints from snake to 6 for force feed forward" << std::endl;
+    } else {
+        torqueDesired.Ref(number_of_joints_kinematics()).Add(jf);
+    }
+
+    // add torque for jaws
+    torqueDesired.at(6) = m_jaw_servo_jf;
+
+    // convert to cisstParameterTypes
+    if (m_has_coupling) {
+        torqueDesired = m_coupling.JointToActuatorEffort() * torqueDesired;
+    }
+
+    m_pid_feed_forward_servo_jf.ForceTorque().Assign(torqueDesired);
+    m_pid_feed_forward_servo_jf.SetTimestamp(StateTable.GetTic());
+
+    PID.feed_forward_jf(m_pid_feed_forward_servo_jf);
+}
+
 void mtsIntuitiveResearchKitPSM::servo_jf_internal(const vctDoubleVec & newEffort)
 {
     if (!is_cartesian_ready()) {

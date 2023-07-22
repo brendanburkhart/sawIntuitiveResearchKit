@@ -18,6 +18,7 @@
 
 // system include
 #include <iostream>
+#include <sstream>
 
 // cisst
 #include <sawIntuitiveResearchKit/mtsIntuitiveResearchKit.h>
@@ -46,20 +47,30 @@ mtsTeleOperationPSM::~mtsTeleOperationPSM()
 {
 }
 
+mtsTeleOperationPSM::Result::Result(bool ok, std::string message, mtsExecutionResult executionResult):
+    ok(ok)
+{
+    std::stringstream ss;
+    ss << message << ": \"" << executionResult << "\"";
+    this->message = ss.str();
+}
+
 void mtsTeleOperationPSM::Arm::populateInterface(mtsInterfaceRequired* interfaceRequired) {
     interfaceRequired->AddFunction("operating_state", operating_state);
     interfaceRequired->AddFunction("state_command", state_command);
 
     interfaceRequired->AddFunction("measured_cp", measured_cp);
-    interfaceRequired->AddFunction("measured_cv", measured_cv, MTS_OPTIONAL);
-    interfaceRequired->AddFunction("spatial/measured_cf", spatial_measured_cf, MTS_OPTIONAL);
+    interfaceRequired->AddFunction("measured_cv", body_measured_cv);
+    interfaceRequired->AddFunction("spatial/measured_cv", spatial_measured_cv);
+    interfaceRequired->AddFunction("body/measured_cf", body_measured_cf);
+    interfaceRequired->AddFunction("spatial/measured_cf", spatial_measured_cf);
     interfaceRequired->AddFunction("setpoint_cp", setpoint_cp);
     interfaceRequired->AddFunction("servo_cpvf", servo_cpvf);
     interfaceRequired->AddFunction("use_gravity_compensation", use_gravity_compensation);
 }
 
-prmStateCartesian mtsTeleOperationPSM::Arm::computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset,
-                                                        double size_scale, double force_scale) const {
+prmStateCartesian mtsTeleOperationPSM::Arm::computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const
+{
     // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     // NOTE: we need take into account changes in PSM base frame if any
     // base frame affects all three of position, velocity, and effort
@@ -86,22 +97,36 @@ prmStateCartesian mtsTeleOperationPSM::Arm::computeGoalFromTarget(Arm* target, c
     goalState.PositionIsDefined() = true;
 
     // linear is scaled and re-oriented
-    goalState.Velocity().Ref<3>(0).Assign(size_scale * target->m_measured_cv.VelocityLinear());
+    goalState.Velocity().Ref<3>(0).Assign(size_scale * target->m_body_measured_cv.VelocityLinear());
     // angular is not scaled
-    goalState.Velocity().Ref<3>(3).Assign(target->m_measured_cv.VelocityAngular());
+    goalState.Velocity().Ref<3>(3).Assign(target->m_body_measured_cv.VelocityAngular());
     goalState.VelocityIsDefined() = true;
 
-    vct3 targetLinearForce = -force_scale * target->m_spatial_measured_cf.Force().Ref<3>(0);
-    vctDouble6 localForce = m_spatial_measured_cf.Force();
-    vct3 externalLinearForce = targetLinearForce - localForce.Ref<3>(0);
-    goalState.Effort().Ref<3>(0) = externalLinearForce;
-
-    vct3 torque = -target->m_spatial_measured_cf.Force().Ref<3>(3);
-    vct3 externalTorque = torque - localForce.Ref<3>(3);
-    goalState.Effort().Ref<3>(3) = externalTorque;
+    vct6 targetForce = target->m_body_measured_cf.Force();
+    vct6 localForce = m_body_measured_cf.Force();
+    vct6 sum = -(targetForce + localForce);
+    goalState.Effort().Assign(sum);
     goalState.EffortIsDefined() = true;
 
     return goalState;
+}
+
+prmStateCartesian mtsTeleOperationPSM::ArmMTM::computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const
+{
+    auto goal = Arm::computeGoalFromTarget(target, alignment_offset, size_scale);
+
+    std::cout << "MTM: " << goal.Effort()[0] << ", " << goal.Effort()[1] << ", " << goal.Effort()[2] << std::endl;
+
+    return goal;
+}
+
+prmStateCartesian mtsTeleOperationPSM::ArmPSM::computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const
+{
+    auto goal = Arm::computeGoalFromTarget(target, alignment_offset, size_scale);
+
+    std::cout << "PSM: " << goal.Effort()[0] << ", " << goal.Effort()[1] << ", " << goal.Effort()[2] << std::endl;
+
+    return goal;
 }
 
 void mtsTeleOperationPSM::ArmMTM::populateInterface(mtsInterfaceRequired* interfaceRequired) {
@@ -121,6 +146,38 @@ void mtsTeleOperationPSM::ArmPSM::populateInterface(mtsInterfaceRequired* interf
     interfaceRequired->AddFunction("jaw/setpoint_js", jaw_setpoint_js, MTS_OPTIONAL);
     interfaceRequired->AddFunction("jaw/configuration_js", jaw_configuration_js, MTS_OPTIONAL);
     interfaceRequired->AddFunction("jaw/servo_jp", jaw_servo_jp, MTS_OPTIONAL);
+}
+
+mtsTeleOperationPSM::Result mtsTeleOperationPSM::Arm::getData() {
+    mtsExecutionResult execution_result;
+
+    execution_result = measured_cp(m_measured_cp);
+    if (!execution_result.IsOK()) { return Result(false, "call to measured_cp failed", execution_result); }
+
+    body_measured_cv(m_body_measured_cv);
+    if (!execution_result.IsOK()) { return Result(false, "call to measured_cv failed", execution_result); }
+
+    spatial_measured_cv(m_spatial_measured_cv);
+    if (!execution_result.IsOK()) { return Result(false, "call to spatial_measured_cv failed", execution_result); }
+
+    body_measured_cf(m_body_measured_cf);
+    if (!execution_result.IsOK()) { return Result(false, "call to body_measured_cf failed", execution_result); }
+
+    spatial_measured_cf(m_spatial_measured_cf);
+    if (!execution_result.IsOK()) { return Result(false, "call to spatial_measured_cf failed", execution_result); }
+
+    setpoint_cp(m_setpoint_cp);
+    if (!execution_result.IsOK()) { return Result(false, "call to setpoint_cp failed", execution_result); }
+
+    return Result(true, "", execution_result);
+}
+
+mtsTeleOperationPSM::Result mtsTeleOperationPSM::ArmMTM::getData() {
+    return Arm::getData();
+}
+
+mtsTeleOperationPSM::Result mtsTeleOperationPSM::ArmPSM::getData() {
+    return Arm::getData();
 }
 
 void mtsTeleOperationPSM::Init(void)
@@ -180,13 +237,17 @@ void mtsTeleOperationPSM::Init(void)
 
     this->StateTable.AddData(mMTM.m_measured_cp, "MTM/measured_cp");
     this->StateTable.AddData(mMTM.m_initial_cp, "MTM/initial_cp");
-    this->StateTable.AddData(mMTM.m_measured_cv, "MTM/measured_cv");
+    this->StateTable.AddData(mMTM.m_body_measured_cv, "MTM/measured_cv");
+    this->StateTable.AddData(mMTM.m_spatial_measured_cv, "MTM/spatial_measured_cv");
+    this->StateTable.AddData(mMTM.m_body_measured_cf, "MTM/body_measured_cf");
     this->StateTable.AddData(mMTM.m_spatial_measured_cf, "MTM/spatial_measured_cf");
     this->StateTable.AddData(mMTM.m_setpoint_cp, "MTM/setpoint_cp");
     this->StateTable.AddData(mMTM.m_setpoint_cp, "MTM/setpoint_cp");
     this->StateTable.AddData(mPSM.m_measured_cp, "PSM/measured_cp");
     this->StateTable.AddData(mPSM.m_initial_cp, "PSM/initial_cp");
-    this->StateTable.AddData(mPSM.m_measured_cv, "PSM/measured_cv");
+    this->StateTable.AddData(mPSM.m_body_measured_cv, "PSM/measured_cv");
+    this->StateTable.AddData(mPSM.m_spatial_measured_cv, "PSM/spatial_measured_cv");
+    this->StateTable.AddData(mPSM.m_body_measured_cf, "PSM/body_measured_cf");
     this->StateTable.AddData(mPSM.m_spatial_measured_cf, "PSM/spatial_measured_cf");
     this->StateTable.AddData(mPSM.m_setpoint_cp, "PSM/setpoint_cp");
     this->StateTable.AddData(m_alignment_offset, "alignment_offset");
@@ -257,7 +318,7 @@ void mtsTeleOperationPSM::Init(void)
                                         mMTM.m_measured_cp,
                                         "MTM/measured_cp");
         mInterface->AddCommandReadState(this->StateTable,
-                                        mMTM.m_measured_cv,
+                                        mMTM.m_body_measured_cv,
                                         "MTM/measured_cv");
         mInterface->AddCommandReadState(this->StateTable,
                                         mPSM.m_setpoint_cp,
@@ -475,11 +536,6 @@ void mtsTeleOperationPSM::Startup(void)
             m_jaw.ignore = true;
         }
     }
-
-    // check if MTM has measured_cv
-    std::cerr << "------------------- " << CMN_LOG_DETAILS << "  we should add a config flag so users can use position only" << std::endl;
-    mMTM.use_measured_cv = mMTM.measured_cv.IsValid();
-    mPSM.use_measured_cv = mPSM.measured_cv.IsValid();
 }
 
 void mtsTeleOperationPSM::Run(void)
@@ -707,67 +763,23 @@ void mtsTeleOperationPSM::StateChanged(void)
 
 void mtsTeleOperationPSM::RunAllStates(void)
 {
+    Result result;
+
+    result = mMTM.getData();
+    if (!result.ok) {
+        CMN_LOG_CLASS_RUN_ERROR << "Run: MTM: " << result.message << std::endl;
+        mInterface->SendError(this->GetName() + ": MTM: " + result.message);
+        mTeleopState.SetDesiredState("DISABLED");
+    }
+
+    result = mPSM.getData();
+    if (!result.ok) {
+        CMN_LOG_CLASS_RUN_ERROR << "Run: PSM: " << result.message << std::endl;
+        mInterface->SendError(this->GetName() + ": PSM: " + result.message);
+        mTeleopState.SetDesiredState("DISABLED");
+    }
+
     mtsExecutionResult executionResult;
-
-    // get MTM Cartesian position
-    executionResult = mMTM.measured_cp(mMTM.m_measured_cp);
-    if (!executionResult.IsOK()) {
-        CMN_LOG_CLASS_RUN_ERROR << "Run: call to MTM.measured_cp failed \""
-                                << executionResult << "\"" << std::endl;
-        mInterface->SendError(this->GetName() + ": unable to get cartesian position from MTM");
-        mTeleopState.SetDesiredState("DISABLED");
-    }
-    executionResult = mPSM.measured_cp(mPSM.m_measured_cp);
-    if (!executionResult.IsOK()) {
-        CMN_LOG_CLASS_RUN_ERROR << "Run: call to PSM.measured_cp failed \""
-                                << executionResult << "\"" << std::endl;
-        mInterface->SendError(this->GetName() + ": unable to get cartesian position from PSM");
-        mTeleopState.SetDesiredState("DISABLED");
-    }
-    executionResult = mMTM.measured_cv(mMTM.m_measured_cv);
-    if (!executionResult.IsOK()) {
-        CMN_LOG_CLASS_RUN_ERROR << "Run: call to MTM.measured_cv failed \""
-                                << executionResult << "\"" << std::endl;
-        mInterface->SendError(this->GetName() + ": unable to get cartesian velocity from MTM");
-        mTeleopState.SetDesiredState("DISABLED");
-    }
-    executionResult = mPSM.measured_cv(mPSM.m_measured_cv);
-    if (!executionResult.IsOK()) {
-        CMN_LOG_CLASS_RUN_ERROR << "Run: call to PSM.measured_cv failed \""
-                                << executionResult << "\"" << std::endl;
-        mInterface->SendError(this->GetName() + ": unable to get cartesian velocity from PSM");
-        mTeleopState.SetDesiredState("DISABLED");
-    }
-    executionResult = mMTM.spatial_measured_cf(mMTM.m_spatial_measured_cf);
-    if (!executionResult.IsOK()) {
-        CMN_LOG_CLASS_RUN_ERROR << "Run: call to MTM.spatial_measured_cf failed \""
-                                << executionResult << "\"" << std::endl;
-        mInterface->SendError(this->GetName() + ": unable to get cartesian effort from MTM");
-        mTeleopState.SetDesiredState("DISABLED");
-    }
-    executionResult = mPSM.spatial_measured_cf(mPSM.m_spatial_measured_cf);
-    if (!executionResult.IsOK()) {
-        CMN_LOG_CLASS_RUN_ERROR << "Run: call to PSM.spatial_measured_cf failed \""
-                                << executionResult << "\"" << std::endl;
-        mInterface->SendError(this->GetName() + ": unable to get cartesian effort from PSM");
-        mTeleopState.SetDesiredState("DISABLED");
-    }
-
-    executionResult = mMTM.setpoint_cp(mMTM.m_setpoint_cp);
-    if (!executionResult.IsOK()) {
-        CMN_LOG_CLASS_RUN_ERROR << "Run: call to MTM.setpoint_cp failed \""
-                                << executionResult << "\"" << std::endl;
-    }
-
-    // get PSM Cartesian position
-    executionResult = mPSM.setpoint_cp(mPSM.m_setpoint_cp);
-    if (!executionResult.IsOK()) {
-        CMN_LOG_CLASS_RUN_ERROR << "Run: call to PSM.setpoint_cp failed \""
-                                << executionResult << "\"" << std::endl;
-        mInterface->SendError(this->GetName() + ": unable to get cartesian position from PSM");
-        mTeleopState.SetDesiredState("DISABLED");
-    }
-
     // get base-frame cartesian position if available
     if (mBaseFrame.measured_cp.IsValid()) {
         executionResult = mBaseFrame.measured_cp(mBaseFrame.m_measured_cp);
@@ -1047,8 +1059,8 @@ void mtsTeleOperationPSM::RunEnabled(void)
         return;
     }
 
-    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM, m_alignment_offset_initial, m_scale, 1.0);
-    mMTM.m_servo_cpvf = mMTM.computeGoalFromTarget(&mPSM, m_alignment_offset_initial.Inverse(), 1.0 / m_scale, 1.0);
+    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM, m_alignment_offset_initial, m_scale);
+    mMTM.m_servo_cpvf = mMTM.computeGoalFromTarget(&mPSM, m_alignment_offset_initial.Inverse(), 1.0 / m_scale);
 
     mMTM.servo_cpvf(mMTM.m_servo_cpvf);
     mPSM.servo_cpvf(mPSM.m_servo_cpvf);
