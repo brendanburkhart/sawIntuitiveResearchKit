@@ -96,37 +96,23 @@ prmStateCartesian mtsTeleOperationPSM::Arm::computeGoalFromTarget(Arm* target, c
     goalState.Position().FromNormalized(goalPosition);
     goalState.PositionIsDefined() = true;
 
+    auto goalAngVelocity = target->m_body_measured_cv.VelocityAngular();
+    auto targetVelocity = target->m_body_measured_cv.VelocityLinear();
+
     // linear is scaled and re-oriented
-    goalState.Velocity().Ref<3>(0).Assign(size_scale * target->m_body_measured_cv.VelocityLinear());
+    goalState.Velocity().Ref<3>(0).Assign(size_scale * targetVelocity);
     // angular is not scaled
-    goalState.Velocity().Ref<3>(3).Assign(target->m_body_measured_cv.VelocityAngular());
+    goalState.Velocity().Ref<3>(3).Assign(goalAngVelocity);
     goalState.VelocityIsDefined() = true;
 
     vct6 targetForce = target->m_body_measured_cf.Force();
     vct6 localForce = m_body_measured_cf.Force();
-    vct6 sum = -(targetForce + localForce);
+
+    vct6 sum = (-targetForce) - localForce;
     goalState.Effort().Assign(sum);
     goalState.EffortIsDefined() = true;
 
     return goalState;
-}
-
-prmStateCartesian mtsTeleOperationPSM::ArmMTM::computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const
-{
-    auto goal = Arm::computeGoalFromTarget(target, alignment_offset, size_scale);
-
-    std::cout << "MTM: " << goal.Effort()[0] << ", " << goal.Effort()[1] << ", " << goal.Effort()[2] << std::endl;
-
-    return goal;
-}
-
-prmStateCartesian mtsTeleOperationPSM::ArmPSM::computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const
-{
-    auto goal = Arm::computeGoalFromTarget(target, alignment_offset, size_scale);
-
-    std::cout << "PSM: " << goal.Effort()[0] << ", " << goal.Effort()[1] << ", " << goal.Effort()[2] << std::endl;
-
-    return goal;
 }
 
 void mtsTeleOperationPSM::ArmMTM::populateInterface(mtsInterfaceRequired* interfaceRequired) {

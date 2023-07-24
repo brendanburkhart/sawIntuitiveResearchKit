@@ -151,7 +151,6 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     class ArmMTM : public Arm {
     public:
         void populateInterface(mtsInterfaceRequired* interfaceRequired) override;
-        prmStateCartesian computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const override;
 
         Result getData() override;
 
@@ -169,7 +168,6 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     class ArmPSM : public Arm {
     public:
         void populateInterface(mtsInterfaceRequired* interfaceRequired) override;
-        prmStateCartesian computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const override;
 
         Result getData() override;
 

@@ -1978,10 +1978,10 @@ void mtsIntuitiveResearchKitArm::servo_jp_internal(const vctDoubleVec & jp,
                                                    const vctDoubleVec & jv)
 {
     // feed forward
-    if (use_feed_forward()) {
-        update_feed_forward(m_pid_feed_forward_servo_jf.ForceTorque());
-    }
-    PID.feed_forward_jf(m_pid_feed_forward_servo_jf);
+    // if (use_feed_forward()) {
+    //     update_feed_forward(m_pid_feed_forward_servo_jf.ForceTorque());
+    // }
+    // PID.feed_forward_jf(m_pid_feed_forward_servo_jf);
 
     // position, velocity, effort
     m_servo_jp_param.Goal().Assign(jp);
@@ -2381,7 +2381,7 @@ vctDoubleVec mtsIntuitiveResearchKitArm::estimateExternalForces(const vctDoubleV
 
 vctDoubleVec mtsIntuitiveResearchKitArm::cartesianToJointVelocities(vctDouble6& cartesianVelocity)
 {
-    //auto transform = m_base_frame.Rotation();
+    // auto transform = m_base_frame.Rotation();
     auto transform = m_measured_cp.Position().Rotation();
 
     vctDouble6 velocity;
@@ -2390,10 +2390,13 @@ vctDoubleVec mtsIntuitiveResearchKitArm::cartesianToJointVelocities(vctDouble6& 
 
     vctDoubleVec jv(number_of_joints_kinematics());
 
+    vctDoubleMat jacobian_copy(m_body_jacobian.rows(), m_body_jacobian.cols());
+    jacobian_copy.Assign(m_body_jacobian);
+
     // update the spatial jacobian pseudo inverse
     nmrPInverseDynamicData jacobian_pinverse_data;
-    jacobian_pinverse_data.Allocate(m_body_jacobian);
-    nmrPInverse(m_body_jacobian, jacobian_pinverse_data);
+    jacobian_pinverse_data.Allocate(jacobian_copy);
+    nmrPInverse(jacobian_copy, jacobian_pinverse_data);
 
     // compute joint velocities
     vctDoubleVec v(6);

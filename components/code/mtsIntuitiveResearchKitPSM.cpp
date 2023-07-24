@@ -1358,11 +1358,12 @@ void mtsIntuitiveResearchKitPSM::feed_forward_jf_internal(const vctDoubleVec & j
 {
     // pad array for PID
     vctDoubleVec torqueDesired(number_of_joints(), 0.0); // for PID
+    torqueDesired.Assign(m_coupling.ActuatorToJointEffort() * m_pid_feed_forward_servo_jf.ForceTorque());
 
     if (m_snake_like) {
         std::cerr << CMN_LOG_DETAILS << " need to convert 8 joints from snake to 6 for force feed forward" << std::endl;
     } else {
-        torqueDesired.Ref(number_of_joints_kinematics()).Add(jf);
+        torqueDesired.Ref(number_of_joints_kinematics()).Assign(jf);
     }
 
     // add torque for jaws
