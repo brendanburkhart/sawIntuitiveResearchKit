@@ -1015,7 +1015,11 @@ void mtsIntuitiveResearchKitArm::get_robot_data(void)
         m_body_jacobian_transpose.Assign(m_body_jacobian.Transpose());
         nmrPInverse(m_body_jacobian_transpose, m_jacobian_transpose_pinverse_data);
         vctDoubleVec force(6);
-        force.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), m_kin_measured_js.Effort());
+
+        auto measured_joint_efforts = m_kin_measured_js.Effort();
+        auto external_joint_forces = estimateExternalForces(measured_joint_efforts, m_kin_measured_js.Position(), m_kin_measured_js.Velocity());
+
+        force.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), external_joint_forces);
         if (true/*m_body_cf_orientation_absolute*/) {
             // forces
             relative.Assign(force.Ref(3, 0));
@@ -1035,9 +1039,7 @@ void mtsIntuitiveResearchKitArm::get_robot_data(void)
         m_spatial_jacobian_transpose.Assign(m_spatial_jacobian.Transpose());
         nmrPInverse(m_spatial_jacobian_transpose, m_jacobian_transpose_pinverse_data);
 
-        auto measured_joint_efforts = m_kin_measured_js.Effort(); // use disturbance observer instead of current-based torque measurement
-        auto external_joint_forces = estimateExternalForces(measured_joint_efforts, m_kin_measured_js.Position(), m_kin_measured_js.Velocity());
-        force.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), measured_joint_efforts);
+        force.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), external_joint_forces);
         vctDouble6 spatial_force;
         spatial_force.Assign(force);
         m_spatial_measured_cf.Force().Ref<3>(0).ProductOf(m_base_frame.Rotation(), spatial_force.Ref<3>(0));

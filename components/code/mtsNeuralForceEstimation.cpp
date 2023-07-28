@@ -19,31 +19,41 @@ Ort::Value vec_to_tensor(std::vector<T>& data, const std::vector<std::int64_t>& 
   return tensor;
 }
 
-mtsNeuralForceEstimation::mtsNeuralForceEstimation(const std::basic_string<ORTCHAR_T> & modelFile)
-    : environment(ORT_LOGGING_LEVEL_WARNING, "mtsNeuralForceEstimation"),
-      session(environment, modelFile.c_str(), Ort::SessionOptions())
+mtsNeuralForceEstimation::mtsNeuralForceEstimation() : is_loaded(false) {}
+
+bool mtsNeuralForceEstimation::Load(const std::basic_string<ORTCHAR_T> & modelFile)
 {
+    environment = Ort::Env(ORT_LOGGING_LEVEL_WARNING, "mtsNeuralForceEstimation");
+    session = std::make_unique<Ort::Session>(environment, modelFile.c_str(), Ort::SessionOptions());
+
     Ort::AllocatorWithDefaultOptions allocator;
     
-    for (std::size_t i = 0; i < session.GetInputCount(); i++) {
-        input_names.emplace_back(session.GetInputNameAllocated(i, allocator).get());
-        input_shapes = session.GetInputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape();
-    }
-    for (auto& s : input_shapes) {
-        if (s < 0) {
-        s = 1;
-        }
+    for (std::size_t i = 0; i < session->GetInputCount(); i++) {
+        input_names.emplace_back(session->GetInputNameAllocated(i, allocator).get());
+        input_shapes = session->GetInputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape();
     }
 
-    for (std::size_t i = 0; i < session.GetOutputCount(); i++) {
-        output_names.emplace_back(session.GetOutputNameAllocated(i, allocator).get());
-        auto output_shapes = session.GetOutputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape();
+    for (auto& s : input_shapes) {
+        s = (s >= 0) ? s : 1;
     }
+
+    for (std::size_t i = 0; i < session->GetOutputCount(); i++) {
+        output_names.emplace_back(session->GetOutputNameAllocated(i, allocator).get());
+    }
+
+    is_loaded = true;
+    return true;
+}
+
+bool mtsNeuralForceEstimation::Ready() const {
+    return is_loaded;
 }
 
 vctDoubleVec mtsNeuralForceEstimation::infer_jf(const vctDoubleVec& jp, const vctDoubleVec& jv)
 {
-    std::vector<double> input_tensor_values(6);
+    CMN_ASSERT(is_loaded);
+
+    std::vector<float> input_tensor_values(6);
     input_tensor_values[0] = jp[0];
     input_tensor_values[1] = jp[1];
     input_tensor_values[2] = jp[2];
@@ -51,10 +61,8 @@ vctDoubleVec mtsNeuralForceEstimation::infer_jf(const vctDoubleVec& jp, const vc
     input_tensor_values[4] = jv[1];
     input_tensor_values[5] = jv[2];
 
-    auto input_shape = input_shapes;
-
     std::vector<Ort::Value> input_tensors;
-    input_tensors.emplace_back(vec_to_tensor<double>(input_tensor_values, input_shape));
+    input_tensors.emplace_back(vec_to_tensor<float>(input_tensor_values, input_shapes));
 
     std::vector<const char*> input_names_char(input_names.size(), nullptr);
     std::transform(std::begin(input_names), std::end(input_names), std::begin(input_names_char),
@@ -65,14 +73,14 @@ vctDoubleVec mtsNeuralForceEstimation::infer_jf(const vctDoubleVec& jp, const vc
                     [&](const std::string& str) { return str.c_str(); });
 
     try {
-        auto output_tensors = session.Run(Ort::RunOptions{nullptr}, input_names_char.data(), input_tensors.data(),
+        auto output_tensors = session->Run(Ort::RunOptions{nullptr}, input_names_char.data(), input_tensors.data(),
                                         input_names_char.size(), output_names_char.data(), output_names_char.size());
 
         // double-check the dimensions of the output tensors
         // NOTE: the number of output tensors is equal to the number of output nodes specifed in the Run() call
         assert(output_tensors.size() == output_names.size() && output_tensors[0].IsTensor());
 
-        double* output = output_tensors[0].GetTensorMutableData<double>();
+        float* output = output_tensors[0].GetTensorMutableData<float>();
         vctDoubleVec output_vec(3);
         output_vec[0] = output[0];
         output_vec[1] = output[1];

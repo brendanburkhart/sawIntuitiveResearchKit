@@ -36,15 +36,13 @@ http://www.cisst.org/cisst/license.txt.
 CMN_IMPLEMENT_SERVICES_DERIVED_ONEARG(mtsIntuitiveResearchKitMTM, mtsTaskPeriodic, mtsTaskPeriodicConstructorArg);
 
 mtsIntuitiveResearchKitMTM::mtsIntuitiveResearchKitMTM(const std::string & componentName, const double periodInSeconds):
-    mtsIntuitiveResearchKitArm(componentName, periodInSeconds),
-    mForceEstimation("/home/bburkha4/catkin_ws/src/dvrk-ros/dvrk_python/scripts/models/psm_force_estimation.onnx")
+    mtsIntuitiveResearchKitArm(componentName, periodInSeconds)
 {
     Init();
 }
 
 mtsIntuitiveResearchKitMTM::mtsIntuitiveResearchKitMTM(const mtsTaskPeriodicConstructorArg & arg):
-    mtsIntuitiveResearchKitArm(arg),
-    mForceEstimation("/home/bburkha4/catkin_ws/src/dvrk-ros/dvrk_python/scripts/models/psm_force_estimation.onnx")
+    mtsIntuitiveResearchKitArm(arg)
 {
     Init();
 }
@@ -224,6 +222,21 @@ void mtsIntuitiveResearchKitMTM::PreConfigure(const Json::Value & jsonConfig,
                                      << allOptions << std::endl;
             exit(EXIT_FAILURE);
         }
+    }
+
+    const auto jsonForceEstimationFile = jsonConfig["force-estimation-network"];
+    if (!jsonForceEstimationFile.isNull()) {
+        std::string forceEstimationFile = jsonForceEstimationFile.asString();
+        auto fullname = configPath.Find(forceEstimationFile);
+        if (fullname == "") {
+            CMN_LOG_CLASS_INIT_ERROR << "Configure: " << this->GetName()
+                                     << " using file \"" << filename << "\" can't find force estimation network file \""
+                                     << forceEstimationFile << "\" in path: "
+                                     << configPath << std::endl;
+            exit(EXIT_FAILURE);
+        }
+
+        mForceEstimation.Load(forceEstimationFile);
     }
 }
 
@@ -726,8 +739,10 @@ vctDoubleVec mtsIntuitiveResearchKitMTM::estimateExternalForces(const vctDoubleV
     vctDoubleVec output(totalForces.size());
     output.Assign(totalForces);
 
-    // vctDoubleVec dynamics = mForceEstimation.infer_jf(jp.Ref(3), jv.Ref(3));
-    // output.Ref(3).Subtract(dynamics);
+    if (mForceEstimation.Ready()) {
+        vctDoubleVec dynamics = mForceEstimation.infer_jf(jp.Ref(3), jv.Ref(3));
+        output.Ref(3).Subtract(dynamics);
+    }
 
     return output;
 }

@@ -352,8 +352,9 @@ class CISST_EXPORT mtsIntuitiveResearchKitArm: public mtsTaskPeriodic
         m_gravity_compensation_setpoint_js;
     prmConfigurationJoint m_pid_configuration_js, m_kin_configuration_js;
 
-    // efforts
     vctDoubleMat m_body_jacobian, m_body_jacobian_transpose, m_spatial_jacobian, m_spatial_jacobian_transpose;
+
+    // efforts
     WrenchType m_servo_cf_type;
     prmForceCartesianSet m_servo_cf;
     bool m_body_cf_orientation_absolute = false;
