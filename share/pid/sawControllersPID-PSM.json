@@ -9,7 +9,7 @@
 	    "i_gain": 0.0,
 		"use_disturbance_observer": true,
 	    "nominal_mass": 0.001,
-	    "disturbance_cutoff": 20.0,
+	    "disturbance_cutoff": 10.0,
 	    "effort_low_pass_cutoff_frequency": 40,
 	    "f_gain": 1.0
 	}
@@ -23,7 +23,7 @@
 	    "i_gain": 0.0,
 		"use_disturbance_observer": true,
 	    "nominal_mass": 0.001,
-	    "disturbance_cutoff": 20.0,
+	    "disturbance_cutoff": 10.0,
 	    "effort_low_pass_cutoff_frequency": 40,
 	    "f_gain": 1.0
 	}
@@ -37,7 +37,7 @@
 	    "i_gain": 0.0,
 		"use_disturbance_observer": true,
 	    "nominal_mass": 0.001,
-	    "disturbance_cutoff": 20.0,
+	    "disturbance_cutoff": 10.0,
 	    "effort_low_pass_cutoff_frequency": 40,
 	    "f_gain": 1.0
 	}
@@ -46,52 +46,54 @@
 	    "index": 3,
 	    "name": "outer_roll",
 	    "type": 2,
-	    "p_gain": 6.0,
-	    "d_gain": 0.09,
+	    "p_gain": 2.0,
+	    "d_gain": 0.05,
 	    "i_gain": 0.0,
 		"use_disturbance_observer": true,
-	    "nominal_mass": 0.0001,
-	    "disturbance_cutoff": 1.0,
+	    "nominal_mass": 0.000005,
+	    "disturbance_cutoff": 3.0,
 	    "effort_low_pass_cutoff_frequency": 0.1,
-	    "f_gain": 1.0
+	    "f_gain": 0.4
 	}
 	,
 	{
 	    "index": 4,
 	    "name": "outer_wrist_pitch",
 	    "type": 2,
-	    "p_gain": 6.0,
-	    "d_gain": 0.09,
+	    "p_gain": 2.0,
+	    "d_gain": 0.05,
 	    "i_gain": 0.0,
 		"use_disturbance_observer": true,
-	    "nominal_mass": 0.00002,
-	    "disturbance_cutoff": 1.0,
+	    "nominal_mass": 0.000005,
+	    "disturbance_cutoff": 3.0,
 	    "effort_low_pass_cutoff_frequency": 0.1,
-	    "f_gain": 1.0
+	    "f_gain": 0.4
 	}
 	,
 	{
 	    "index": 5,
 	    "name": "outer_wrist_yaw",
 	    "type": 2,
-	    "p_gain": 6.0,
-	    "d_gain": 0.09,
+	    "p_gain": 2.0,
+	    "d_gain": 0.05,
 	    "i_gain": 0.0,
 		"use_disturbance_observer": true,
-	    "nominal_mass": 0.00002,
-	    "disturbance_cutoff": 1.0,
+	    "nominal_mass": 0.000005,
+	    "disturbance_cutoff": 3.0,
 	    "effort_low_pass_cutoff_frequency": 0.1,
-	    "f_gain": 1.0
+	    "f_gain": 0.4
 	}
 	,
 	{
 	    "index": 6,
 	    "name": "jaw",
 	    "type": 2,
-	    "p_gain": 6.0,
-	    "d_gain": 0.09,
+	    "p_gain": 2.0,
+	    "d_gain": 0.05,
 	    "i_gain": 0.0,
-		"use_disturbance_observer": false,
+		"use_disturbance_observer": true,
+		"nominal_mass": 0.000005,
+	    "disturbance_cutoff": 3.0,
 	    "effort_low_pass_cutoff_frequency": 1
 	}
     ]
