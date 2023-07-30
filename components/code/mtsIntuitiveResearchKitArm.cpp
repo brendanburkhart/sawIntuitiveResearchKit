@@ -1561,26 +1561,29 @@ void mtsIntuitiveResearchKitArm::control_servo_cpvf(void)
     // reset flag
     m_pid_new_goal = false;
 
-    // copy current position
+    // position
     vctDoubleVec jp(m_kin_measured_js.Position());
+    if (m_servo_cpvf.PositionIsDefined()) {
+        // compute desired arm position
+        CartesianPositionFrm.From(m_servo_cpvf.Position());
 
-    // compute desired arm position
-    CartesianPositionFrm.From(m_servo_cpvf.Position());
-
-    auto ik_errno = this->InverseKinematics(jp, m_base_frame.Inverse() * CartesianPositionFrm);
-    if (ik_errno != robManipulator::ESUCCESS) {
-        // shows robManipulator error if used
-        if (this->Manipulator) {
-            m_arm_interface->SendError(this->GetName()
-                                        + ": unable to solve inverse kinematics ("
-                                        + this->Manipulator->LastError() + ")");
-        } else {
-            m_arm_interface->SendError(this->GetName() + ": unable to solve inverse kinematics");
+        auto ik_errno = this->InverseKinematics(jp, m_base_frame.Inverse() * CartesianPositionFrm);
+        if (ik_errno != robManipulator::ESUCCESS) {
+            // shows robManipulator error if used
+            if (this->Manipulator) {
+                m_arm_interface->SendError(this->GetName()
+                                            + ": unable to solve inverse kinematics ("
+                                            + this->Manipulator->LastError() + ")");
+            } else {
+                m_arm_interface->SendError(this->GetName() + ": unable to solve inverse kinematics");
+            }
+            return;
         }
-        return;
+    } else {
+        jp = m_kin_measured_js.Position();
     }
 
-    // compute velocities
+    // velocity
     vctDoubleVec jv(number_of_joints_kinematics());
     if (m_servo_cpvf.VelocityIsDefined()) {
         jv.Assign(cartesianToJointVelocities(m_servo_cpvf.Velocity()));
@@ -1588,6 +1591,7 @@ void mtsIntuitiveResearchKitArm::control_servo_cpvf(void)
         jv.Zeros();
     }
 
+    // effort
     vctDoubleVec jf(number_of_joints_kinematics());
     if (m_servo_cpvf.EffortIsDefined()) {
         jf.Assign(cartesianToJointForces(m_servo_cpvf.Effort()));
