@@ -53,13 +53,19 @@ vctDoubleVec mtsNeuralForceEstimation::infer_jf(const vctDoubleVec& jp, const vc
 {
     CMN_ASSERT(is_loaded);
 
-    std::vector<float> input_tensor_values(6);
+    std::vector<float> input_tensor_values(12);
     input_tensor_values[0] = jp[0];
     input_tensor_values[1] = jp[1];
     input_tensor_values[2] = jp[2];
-    input_tensor_values[3] = jv[0];
-    input_tensor_values[4] = jv[1];
-    input_tensor_values[5] = jv[2];
+    input_tensor_values[3] = jp[3];
+    input_tensor_values[4] = jp[4];
+    input_tensor_values[5] = jp[5];
+    input_tensor_values[6] = jv[0];
+    input_tensor_values[7] = jv[1];
+    input_tensor_values[8] = jv[2];
+    input_tensor_values[9] = jv[3];
+    input_tensor_values[10] = jv[4];
+    input_tensor_values[11] = jv[5];
 
     std::vector<Ort::Value> input_tensors;
     input_tensors.emplace_back(vec_to_tensor<float>(input_tensor_values, input_shapes));

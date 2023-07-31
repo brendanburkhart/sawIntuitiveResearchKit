@@ -19,6 +19,11 @@
 #ifndef _mtsTeleOperationPSM_h
 #define _mtsTeleOperationPSM_h
 
+#include <vector>
+#include <tuple>
+#include <string>
+#include <deque>
+
 #include <cisstMultiTask/mtsTaskPeriodic.h>
 #include <cisstParameterTypes/prmEventButton.h>
 #include <cisstParameterTypes/prmPositionCartesianGet.h>
@@ -42,6 +47,12 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     CMN_DECLARE_SERVICES(CMN_DYNAMIC_CREATION_ONEARG, CMN_LOG_ALLOW_DEFAULT);
 
  public:
+    enum class Mode {
+        UNILATERAL,
+        BILATERAL,
+        HIGH_LATENCY
+    };
+
     mtsTeleOperationPSM(const std::string & componentName, const double periodInSeconds);
     mtsTeleOperationPSM(const mtsTaskPeriodicConstructorArg & arg);
     ~mtsTeleOperationPSM();
@@ -125,10 +136,9 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
         mtsFunctionWrite state_command;
 
         mtsFunctionRead  measured_cp;
+        mtsFunctionRead  measured_js;
         mtsFunctionRead  body_measured_cv;
-        mtsFunctionRead  spatial_measured_cv;
         mtsFunctionRead  body_measured_cf;
-        mtsFunctionRead  spatial_measured_cf;
         mtsFunctionRead  setpoint_cp;
 
         mtsFunctionWrite servo_cpvf;
@@ -141,11 +151,15 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
 
         prmPositionCartesianGet m_measured_cp;
         prmVelocityCartesianGet m_body_measured_cv;
-        prmVelocityCartesianGet m_spatial_measured_cv;
         prmForceCartesianGet    m_body_measured_cf;
-        prmForceCartesianGet    m_spatial_measured_cf;
+        prmStateJoint           m_measured_js;
         prmPositionCartesianGet m_setpoint_cp;
-        prmStateCartesian m_servo_cpvf;
+        prmStateCartesian       m_servo_cpvf;
+
+        double sampleDelay = 0.0;
+        std::deque<prmPositionCartesianGet> cp_delay_buffer;
+        std::deque<prmVelocityCartesianGet> cv_delay_buffer;
+        std::deque<prmForceCartesianGet> cf_delay_buffer;
     };
 
     class ArmMTM : public Arm {
@@ -163,6 +177,8 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
 
         prmPositionCartesianSet m_move_cp;
         prmStateJoint m_gripper_measured_js;
+
+        std::deque<prmStateJoint> gripper_delay_buffer;
     };
 
     class ArmPSM : public Arm {
@@ -181,8 +197,13 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
         prmPositionJointSet m_jaw_servo_jp;
     };
 
+    Mode mTeleopMode;
     ArmMTM mMTM;
     ArmPSM mPSM;
+
+    void UnilateralTeleop();
+    void BilateralTeleop();
+    void HighLatencyTeleop();
 
     struct {
         mtsFunctionRead  measured_cp;
@@ -251,6 +272,9 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
 
     bool m_following;
     void set_following(const bool following);
+
+    std::vector<std::tuple<vct6, vct6, vct6>> force_data;
+    std::string force_data_output_file = "/home/bburkha4/catkin_ws/src/dvrk-ros/dvrk_python/scripts/data/psm_js_test.csv";
 };
 
 CMN_DECLARE_SERVICES_INSTANTIATION(mtsTeleOperationPSM);

@@ -60,7 +60,7 @@
 	    "p_deadband": 0.025,
 	    "use_disturbance_observer": true,
 	    "nominal_mass": 0.000005,
-	    "disturbance_cutoff": 3.0,
+	    "disturbance_cutoff": 6.0,
 	    "effort_low_pass_cutoff_frequency": 0.01,
 	    "f_gain": 0.4
 	}
@@ -77,7 +77,7 @@
 	    "p_deadband": 0.025,
 	    "use_disturbance_observer": true,
 	    "nominal_mass": 0.000005,
-	    "disturbance_cutoff": 3.0,
+	    "disturbance_cutoff": 6.0,
 	    "effort_low_pass_cutoff_frequency": 0.01,
 	    "f_gain": 0.4
 	}
@@ -94,7 +94,7 @@
 	    "p_deadband": 0.025,
 	    "use_disturbance_observer": true,
 	    "nominal_mass": 0.000005,
-	    "disturbance_cutoff": 3.0,
+	    "disturbance_cutoff": 6.0,
 	    "effort_low_pass_cutoff_frequency": 0.01,
 	    "f_gain": 0.4
 	}
@@ -111,7 +111,7 @@
 	    "p_deadband": 0.025,
 	    "use_disturbance_observer": true,
 	    "nominal_mass": 0.000005,
-	    "disturbance_cutoff": 1.0,
+	    "disturbance_cutoff": 6.0,
 	    "effort_low_pass_cutoff_frequency": 0.01,
 	    "f_gain": 0.4
 	}

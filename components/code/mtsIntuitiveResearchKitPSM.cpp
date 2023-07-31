@@ -1643,7 +1643,7 @@ vctDoubleVec mtsIntuitiveResearchKitPSM::estimateExternalForces(const vctDoubleV
     output.Assign(totalForces);
 
     if (mForceEstimation.Ready()) {
-        vctDoubleVec dynamics = mForceEstimation.infer_jf(jp.Ref(3), jv.Ref(3));
+        vctDoubleVec dynamics = mForceEstimation.infer_jf(jp.Ref(6), jv.Ref(6));
         output.Ref(3).Subtract(dynamics);
     }
 

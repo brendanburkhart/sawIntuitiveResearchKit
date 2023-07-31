@@ -19,6 +19,7 @@
 // system include
 #include <iostream>
 #include <sstream>
+#include <fstream>
 
 // cisst
 #include <sawIntuitiveResearchKit/mtsIntuitiveResearchKit.h>
@@ -31,6 +32,7 @@ CMN_IMPLEMENT_SERVICES_DERIVED_ONEARG(mtsTeleOperationPSM, mtsTaskPeriodic, mtsT
 
 mtsTeleOperationPSM::mtsTeleOperationPSM(const std::string & componentName, const double periodInSeconds):
     mtsTaskPeriodic(componentName, periodInSeconds),
+    mTeleopMode(Mode::UNILATERAL),
     mTeleopState(componentName, "DISABLED")
 {
     Init();
@@ -38,6 +40,7 @@ mtsTeleOperationPSM::mtsTeleOperationPSM(const std::string & componentName, cons
 
 mtsTeleOperationPSM::mtsTeleOperationPSM(const mtsTaskPeriodicConstructorArg & arg):
     mtsTaskPeriodic(arg),
+    mTeleopMode(Mode::UNILATERAL),
     mTeleopState(arg.Name, "DISABLED")
 {
     Init();
@@ -59,11 +62,10 @@ void mtsTeleOperationPSM::Arm::populateInterface(mtsInterfaceRequired* interface
     interfaceRequired->AddFunction("operating_state", operating_state);
     interfaceRequired->AddFunction("state_command", state_command);
 
+    interfaceRequired->AddFunction("measured_js", measured_js);
     interfaceRequired->AddFunction("measured_cp", measured_cp);
     interfaceRequired->AddFunction("measured_cv", body_measured_cv);
-    interfaceRequired->AddFunction("spatial/measured_cv", spatial_measured_cv);
     interfaceRequired->AddFunction("body/measured_cf", body_measured_cf);
-    interfaceRequired->AddFunction("spatial/measured_cf", spatial_measured_cf);
     interfaceRequired->AddFunction("setpoint_cp", setpoint_cp);
     interfaceRequired->AddFunction("servo_cpvf", servo_cpvf);
     interfaceRequired->AddFunction("use_gravity_compensation", use_gravity_compensation);
@@ -140,25 +142,65 @@ mtsTeleOperationPSM::Result mtsTeleOperationPSM::Arm::getData() {
     execution_result = measured_cp(m_measured_cp);
     if (!execution_result.IsOK()) { return Result(false, "call to measured_cp failed", execution_result); }
 
-    body_measured_cv(m_body_measured_cv);
+    execution_result = body_measured_cv(m_body_measured_cv);
     if (!execution_result.IsOK()) { return Result(false, "call to measured_cv failed", execution_result); }
 
-    spatial_measured_cv(m_spatial_measured_cv);
-    if (!execution_result.IsOK()) { return Result(false, "call to spatial_measured_cv failed", execution_result); }
+    execution_result = measured_js(m_measured_js);
+    if (!execution_result.IsOK()) { return Result(false, "call to measured_js failed", execution_result); }
 
-    body_measured_cf(m_body_measured_cf);
+    execution_result = body_measured_cf(m_body_measured_cf);
     if (!execution_result.IsOK()) { return Result(false, "call to body_measured_cf failed", execution_result); }
 
-    spatial_measured_cf(m_spatial_measured_cf);
-    if (!execution_result.IsOK()) { return Result(false, "call to spatial_measured_cf failed", execution_result); }
-
-    setpoint_cp(m_setpoint_cp);
+    execution_result = setpoint_cp(m_setpoint_cp);
     if (!execution_result.IsOK()) { return Result(false, "call to setpoint_cp failed", execution_result); }
+
+    if (sampleDelay > 0) {
+        cp_delay_buffer.push_back(m_measured_cp);
+        cv_delay_buffer.push_back(m_body_measured_cv);
+        cf_delay_buffer.push_back(m_body_measured_cf);
+
+        // if someone *decreased* artifical latency while running
+        while (cp_delay_buffer.size() > sampleDelay) {
+            cp_delay_buffer.pop_front();
+            cv_delay_buffer.pop_front();
+            cf_delay_buffer.pop_front();
+        }
+
+        m_measured_cp = cp_delay_buffer.front();
+        m_body_measured_cv = cv_delay_buffer.front();
+        m_body_measured_cf = cf_delay_buffer.front();
+
+        if (cp_delay_buffer.size() >= sampleDelay) {
+            cp_delay_buffer.pop_front();
+            cv_delay_buffer.pop_front();
+            cf_delay_buffer.pop_front();
+        }
+    }
 
     return Result(true, "", execution_result);
 }
 
 mtsTeleOperationPSM::Result mtsTeleOperationPSM::ArmMTM::getData() {
+    if (gripper_measured_js.IsValid()) {
+        mtsExecutionResult execution_result = gripper_measured_js(m_gripper_measured_js);
+        if (!execution_result.IsOK()) { return Result(false, "call to gripper_measured_js failed", execution_result); }
+
+        if (sampleDelay > 0) {
+            gripper_delay_buffer.push_back(m_gripper_measured_js);
+
+            // if someone *decreased* artifical latency while running
+            while (gripper_delay_buffer.size() > sampleDelay) {
+                gripper_delay_buffer.pop_front();
+            }
+
+            m_gripper_measured_js = gripper_delay_buffer.front();
+
+            if (gripper_delay_buffer.size() >= sampleDelay) {
+                gripper_delay_buffer.pop_front();
+            }
+        }
+    }
+
     return Arm::getData();
 }
 
@@ -224,17 +266,13 @@ void mtsTeleOperationPSM::Init(void)
     this->StateTable.AddData(mMTM.m_measured_cp, "MTM/measured_cp");
     this->StateTable.AddData(mMTM.m_initial_cp, "MTM/initial_cp");
     this->StateTable.AddData(mMTM.m_body_measured_cv, "MTM/measured_cv");
-    this->StateTable.AddData(mMTM.m_spatial_measured_cv, "MTM/spatial_measured_cv");
     this->StateTable.AddData(mMTM.m_body_measured_cf, "MTM/body_measured_cf");
-    this->StateTable.AddData(mMTM.m_spatial_measured_cf, "MTM/spatial_measured_cf");
     this->StateTable.AddData(mMTM.m_setpoint_cp, "MTM/setpoint_cp");
     this->StateTable.AddData(mMTM.m_setpoint_cp, "MTM/setpoint_cp");
     this->StateTable.AddData(mPSM.m_measured_cp, "PSM/measured_cp");
     this->StateTable.AddData(mPSM.m_initial_cp, "PSM/initial_cp");
     this->StateTable.AddData(mPSM.m_body_measured_cv, "PSM/measured_cv");
-    this->StateTable.AddData(mPSM.m_spatial_measured_cv, "PSM/spatial_measured_cv");
     this->StateTable.AddData(mPSM.m_body_measured_cf, "PSM/body_measured_cf");
-    this->StateTable.AddData(mPSM.m_spatial_measured_cf, "PSM/spatial_measured_cf");
     this->StateTable.AddData(mPSM.m_setpoint_cp, "PSM/setpoint_cp");
     this->StateTable.AddData(m_alignment_offset, "alignment_offset");
 
@@ -382,6 +420,25 @@ void mtsTeleOperationPSM::Configure(const Json::Value & jsonConfig)
     // base component configuration
     mtsComponent::ConfigureJSON(jsonConfig);
 
+    // read teleop mode if present
+    jsonValue = jsonConfig["mode"];
+    if (!jsonValue.empty()) {
+        const auto teleopMode = jsonValue.asString();
+        if (teleopMode == "UNILATERAL") {
+            mTeleopMode = Mode::UNILATERAL;
+        } else if (teleopMode == "BILATERAL") {
+            mTeleopMode = Mode::BILATERAL;
+        } else if (teleopMode == "HIGH_LATENCY") {
+            mTeleopMode = Mode::HIGH_LATENCY;
+        } else {
+            const std::string options = "UNILATERAL, BILATERAL, HIGH_LATENCY";
+            CMN_LOG_CLASS_INIT_ERROR << "Configure: " << this->GetName()
+                                     << " mode \"" << teleopMode << "\" is not valid.  Valid options are: "
+                                     << options << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    }
+
     // read scale if present
     jsonValue = jsonConfig["scale"];
     if (!jsonValue.empty()) {
@@ -391,6 +448,20 @@ void mtsTeleOperationPSM::Configure(const Json::Value & jsonConfig)
         CMN_LOG_CLASS_INIT_ERROR << "Configure " << this->GetName()
                                  << ": \"scale\" must be a positive number.  Found " << m_scale << std::endl;
         exit(EXIT_FAILURE);
+    }
+
+    // read artificial-latency if present
+    jsonValue = jsonConfig["artificial-latency-ms"];
+    if (!jsonValue.empty()) {
+        double latency = jsonValue.asDouble();
+        if (latency < 0.0) {
+            CMN_LOG_CLASS_INIT_ERROR << "Configure " << this->GetName()
+                                     << ": \"artificial-latency-ms\" must be a non-negative number.  Found " << latency << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        int sample_delay = (int)(latency * (0.001 / GetPeriodicity()));
+        mPSM.sampleDelay = sample_delay;
+        mMTM.sampleDelay = sample_delay;
     }
 
     // read orientation if present
@@ -1029,6 +1100,34 @@ void mtsTeleOperationPSM::EnterEnabled(void)
     } else {
         set_following(true);
     }
+
+    force_data = {};
+}
+
+void mtsTeleOperationPSM::UnilateralTeleop() {
+    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM, m_alignment_offset_initial, m_scale);
+    mPSM.m_servo_cpvf.EffortIsDefined() = false;
+    mPSM.servo_cpvf(mPSM.m_servo_cpvf);
+}
+
+void mtsTeleOperationPSM::BilateralTeleop() {
+    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM, m_alignment_offset_initial, m_scale);
+    mMTM.m_servo_cpvf = mMTM.computeGoalFromTarget(&mPSM, m_alignment_offset_initial.Inverse(), 1.0 / m_scale);
+
+    mMTM.servo_cpvf(mMTM.m_servo_cpvf);
+    mPSM.servo_cpvf(mPSM.m_servo_cpvf);
+}
+
+void mtsTeleOperationPSM::HighLatencyTeleop() {
+    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM, m_alignment_offset_initial, m_scale);
+    mMTM.m_servo_cpvf = mMTM.computeGoalFromTarget(&mPSM, m_alignment_offset_initial.Inverse(), 1.0 / m_scale);
+
+    mPSM.m_servo_cpvf.PositionIsDefined() = false;
+    mPSM.m_servo_cpvf.VelocityIsDefined() = false;
+    mMTM.m_servo_cpvf.EffortIsDefined() = false;
+
+    mMTM.servo_cpvf(mMTM.m_servo_cpvf);
+    mPSM.servo_cpvf(mPSM.m_servo_cpvf);
 }
 
 void mtsTeleOperationPSM::RunEnabled(void)
@@ -1045,11 +1144,29 @@ void mtsTeleOperationPSM::RunEnabled(void)
         return;
     }
 
-    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM, m_alignment_offset_initial, m_scale);
-    mMTM.m_servo_cpvf = mMTM.computeGoalFromTarget(&mPSM, m_alignment_offset_initial.Inverse(), 1.0 / m_scale);
+    switch (mTeleopMode)
+    {
+    case Mode::HIGH_LATENCY:
+        HighLatencyTeleop();
+        break;
+    case Mode::BILATERAL:
+        BilateralTeleop();
+        break;
+    case Mode::UNILATERAL:
+    default:
+        UnilateralTeleop();
+        break;
+    }
 
-    mMTM.servo_cpvf(mMTM.m_servo_cpvf);
-    mPSM.servo_cpvf(mPSM.m_servo_cpvf);
+    vct6 jp;
+    vct6 jv;
+    vct6 jf;
+
+    jp.Assign(mPSM.m_measured_js.Position());
+    jv.Assign(mPSM.m_measured_js.Velocity());
+    jf.Assign(mPSM.m_measured_js.Effort());
+
+    force_data.emplace_back(jp, jv, jf);
 
     if (m_jaw.ignore) {
         return;
@@ -1060,7 +1177,6 @@ void mtsTeleOperationPSM::RunEnabled(void)
         mPSM.m_jaw_servo_jp.Goal()[0] = 45.0 * cmnPI_180;
         mPSM.jaw_servo_jp(mPSM.m_jaw_servo_jp);
     } else {
-        mMTM.gripper_measured_js(mMTM.m_gripper_measured_js);
         const double currentGripper = mMTM.m_gripper_measured_js.Position()[0];
         // see if we caught up
         if (!m_jaw_caught_up_after_clutch) {
@@ -1097,6 +1213,27 @@ void mtsTeleOperationPSM::TransitionEnabled(void)
     if (mTeleopState.DesiredStateIsNotCurrent()) {
         set_following(false);
         mTeleopState.SetCurrentState(mTeleopState.DesiredState());
+
+        std::ofstream file(force_data_output_file);
+        file << "jp_0,jp_1,jp_2,jp_3,jp_4,jp_5,jv_0,jv_1,jv_2,jv_3,jv_4,jv_5,jf_0,jf_1,jf_2,jf_3,jf_4,jf_5\n";
+        for (auto& row : force_data) {
+            for (int j = 0; j < 6; j++) {
+                file << (std::get<0>(row))[j] << ",";
+            }
+
+            for (int j = 0; j < 6; j++) {
+                file << (std::get<1>(row))[j] << ",";
+            }
+
+            for (int j = 0; j < 6; j++) {
+                file << (std::get<2>(row))[j];
+                if (j < 5) {
+                    file << ",";
+                }
+            }
+
+            file << "\n";
+        }
     }
 }
 
