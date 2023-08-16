@@ -4,48 +4,51 @@
 	    "index": 0,
 	    "name": "outer_yaw",
 	    "type": 2,
-	    "p_gain": 120.0,
-	    "d_gain": 10.0,
+	    "p_gain": 100.0,
+	    "d_gain": 30.0,
 	    "i_gain": 0.0,
+	    "b_gain": 0.0,
 	    "i_forget_rate": 0.99,
 	    "i_limit": 0.0,
 	    "use_disturbance_observer": true,
 	    "nominal_mass": 0.001,
 	    "disturbance_cutoff": 10.0,
 	    "effort_low_pass_cutoff_frequency": 30,
-	    "f_gain": 1.0
+	    "f_gain": 0.0
 	}
 	,
 	{
 	    "index": 1,
 	    "name": "shoulder_pitch",
 	    "type": 2,
-	    "p_gain": 120.0,
-	    "d_gain": 10.0,
+	    "p_gain": 80.0,
+	    "d_gain": 20.0,
 	    "i_gain": 0.0,
+	    "b_gain": 0.0,
 	    "i_forget_rate": 0.99,
 	    "i_limit": 0.0,
 	    "use_disturbance_observer": true,
 	    "nominal_mass": 0.001,
 	    "disturbance_cutoff": 10.0,
 	    "effort_low_pass_cutoff_frequency": 30,
-	    "f_gain": 1.0
+	    "f_gain": 0.0
 	}
 	,
 	{
 	    "index": 2,
 	    "name": "elbow_pitch",
 	    "type": 2,
-	    "p_gain": 150.0,
-	    "d_gain": 12.0,
+	    "p_gain": 80.0,
+	    "d_gain": 20.0,
 	    "i_gain": 0.0,
+	    "b_gain": 0.0,
 	    "i_forget_rate": 0.99,
 	    "i_limit": 0.0,
 	    "use_disturbance_observer": true,
 	    "nominal_mass": 0.001,
 	    "disturbance_cutoff": 10.0,
 	    "effort_low_pass_cutoff_frequency": 30,
-	    "f_gain": 1.0
+	    "f_gain": 0.0
 	}
 	,
 	{
@@ -55,12 +58,13 @@
 	    "p_gain": 0.15,
 	    "d_gain": 0.03,
 	    "i_gain": 0.0,
+	    "b_gain": 0.0,
 	    "i_forget_rate": 0.99,
 	    "i_limit": 0.0,
 	    "p_deadband": 0.025,
 	    "use_disturbance_observer": true,
 	    "nominal_mass": 0.000005,
-	    "disturbance_cutoff": 6.0,
+	    "disturbance_cutoff": 3.0,
 	    "effort_low_pass_cutoff_frequency": 0.01,
 	    "f_gain": 0.0
 	}
@@ -70,14 +74,15 @@
 	    "name": "wrist_pitch",
 	    "type": 2,
 	    "p_gain": 0.15,
-	    "d_gain": 0.03,
+	    "d_gain": 0.05,
 	    "i_gain": 0.0,
+	    "b_gain": 0.0,
 	    "i_forget_rate": 0.99,
 	    "i_limit": 0.0,
 	    "p_deadband": 0.025,
 	    "use_disturbance_observer": true,
 	    "nominal_mass": 0.000005,
-	    "disturbance_cutoff": 6.0,
+	    "disturbance_cutoff": 3.0,
 	    "effort_low_pass_cutoff_frequency": 0.01,
 	    "f_gain": 0.0
 	}
@@ -89,12 +94,13 @@
 	    "p_gain": 0.08,
 	    "d_gain": 0.02,
 	    "i_gain": 0.0,
+	    "b_gain": 0.0,
 	    "i_forget_rate": 0.99,
 	    "i_limit": 0.0,
 	    "p_deadband": 0.025,
 	    "use_disturbance_observer": true,
 	    "nominal_mass": 0.000005,
-	    "disturbance_cutoff": 6.0,
+	    "disturbance_cutoff": 1.0,
 	    "effort_low_pass_cutoff_frequency": 0.01,
 	    "f_gain": 0.0
 	}
@@ -104,14 +110,15 @@
 	    "name": "wrist_roll",
 	    "type": 2,
 	    "p_gain": 0.01,
-	    "d_gain": 0.002,
+	    "d_gain": 0.005,
 	    "i_gain": 0.0,
+	    "b_gain": 0.0,
 	    "i_forget_rate": 0.99,
 	    "i_limit": 0.0,
 	    "p_deadband": 0.025,
 	    "use_disturbance_observer": true,
 	    "nominal_mass": 0.000005,
-	    "disturbance_cutoff": 6.0,
+	    "disturbance_cutoff": 1.0,
 	    "effort_low_pass_cutoff_frequency": 0.01,
 	    "f_gain": 0.0
 	}

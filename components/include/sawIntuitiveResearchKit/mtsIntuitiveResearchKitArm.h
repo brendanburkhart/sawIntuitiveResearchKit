@@ -367,6 +367,7 @@ class CISST_EXPORT mtsIntuitiveResearchKitArm: public mtsTaskPeriodic
         m_jacobian_pinverse_data,
         m_jacobian_transpose_pinverse_data;
     prmForceCartesianGet m_body_measured_cf, m_spatial_measured_cf;
+    prmForceCartesianGet m_body_external_cf;
 
     // cartesian impendance controller
     osaCartesianImpedanceController * mCartesianImpedanceController;

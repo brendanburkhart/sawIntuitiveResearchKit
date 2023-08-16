@@ -178,7 +178,26 @@ void mtsIntuitiveResearchKitPSM::PostConfigure(const Json::Value & jsonConfig,
             exit(EXIT_FAILURE);
         }
 
-        mForceEstimation.Load(forceEstimationFile);
+        bool ok = mForceEstimation.Load(forceEstimationFile);
+        if (!ok) {
+            CMN_LOG_CLASS_INIT_ERROR << "Failed to load force estimation network" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    const auto jsonWristForceEstimationFile = jsonConfig["force-estimation-wrist-network"];
+    if (!jsonWristForceEstimationFile.isNull()) {
+        std::string forceEstimationFile = jsonWristForceEstimationFile.asString();
+        auto fullname = configPath.Find(forceEstimationFile);
+        if (fullname == "") {
+            CMN_LOG_CLASS_INIT_ERROR << "PostConfigure: " << this->GetName()
+                                     << " using file \"" << filename << "\" can't find wrist force estimation network file \""
+                                     << forceEstimationFile << "\" in path: "
+                                     << configPath << std::endl;
+            exit(EXIT_FAILURE);
+        }
+
+        mWristForceEstimation.Load(forceEstimationFile);
     }
 }
 
@@ -1317,24 +1336,25 @@ void mtsIntuitiveResearchKitPSM::servo_jp_internal(const vctDoubleVec & jp,
     CMN_ASSERT(m_servo_jp_param.Goal().size() == 7);
     // first 6 joints
     ToJointsPID(jp, m_servo_jp_param.Goal());
+
     // velocity - current code only support jaw_servo_jv if servo_jp has a velocity goal
     const size_t jv_size = jv.size();
     m_servo_jp_param.Velocity().SetSize(7);
+    m_servo_jp_param.Velocity().Zeros();
     if (jv_size != 0) {
         ToJointsPID(jv, m_servo_jp_param.Velocity());
     }
     // add jaws - current code has velocity goal set to 0
     m_servo_jp_param.Goal().at(6) = m_jaw_servo_jp;
-    if (jv_size != 0) {
-        m_servo_jp_param.Velocity().at(6) = 0.0;
-    }
     m_servo_jp_param.SetTimestamp(StateTable.GetTic());
+
     if (m_has_coupling) {
         m_servo_jp_param.Goal() = m_coupling.JointToActuatorPosition() * m_servo_jp_param.Goal();
         if (jv_size != 0) {
             m_servo_jp_param.Velocity() = m_coupling.JointToActuatorPosition() * m_servo_jp_param.Velocity();
         }
     }
+
     PID.servo_jp(m_servo_jp_param);
 }
 
@@ -1643,7 +1663,14 @@ vctDoubleVec mtsIntuitiveResearchKitPSM::estimateExternalForces(const vctDoubleV
     output.Assign(totalForces);
 
     if (mForceEstimation.Ready()) {
-        vctDoubleVec dynamics = mForceEstimation.infer_jf(jp.Ref(6), jv.Ref(6));
+        vctDoubleVec dynamics(3);
+        vct3 jp_fixed;
+        vct3 jv_fixed;
+        jp_fixed.Assign(jp.Ref(3));
+        jv_fixed.Assign(jv.Ref(3));
+        dynamics.Assign(mForceEstimation.infer_jf(jp_fixed, jv_fixed));
+        m_kin_error_js.Effort().Ref(3).Assign(dynamics);
+        m_kin_error_js.Effort().Ref(3, 3).Zeros();
         output.Ref(3).Subtract(dynamics);
     }
 

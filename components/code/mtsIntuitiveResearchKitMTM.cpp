@@ -236,7 +236,11 @@ void mtsIntuitiveResearchKitMTM::PreConfigure(const Json::Value & jsonConfig,
             exit(EXIT_FAILURE);
         }
 
-        mForceEstimation.Load(forceEstimationFile);
+        bool ok = mForceEstimation.Load(forceEstimationFile);
+        if (!ok) {
+            CMN_LOG_CLASS_INIT_ERROR << "Failed to load force estimation network" << std::endl;
+            exit(EXIT_FAILURE);
+        }
     }
 }
 
@@ -740,7 +744,14 @@ vctDoubleVec mtsIntuitiveResearchKitMTM::estimateExternalForces(const vctDoubleV
     output.Assign(totalForces);
 
     if (mForceEstimation.Ready()) {
-        vctDoubleVec dynamics = mForceEstimation.infer_jf(jp.Ref(3), jv.Ref(3));
+        vctDoubleVec dynamics(3);
+        vct3 jp_fixed;
+        vct3 jv_fixed;
+        jp_fixed.Assign(jp.Ref(3));
+        jv_fixed.Assign(jv.Ref(3));
+        dynamics.Assign(mForceEstimation.infer_jf(jp_fixed, jv_fixed));
+        m_kin_error_js.Effort().Ref(3).Assign(dynamics);
+        m_kin_error_js.Effort().Ref(4, 3).Zeros();
         output.Ref(3).Subtract(dynamics);
     }
 

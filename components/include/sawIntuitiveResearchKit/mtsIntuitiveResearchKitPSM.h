@@ -215,7 +215,8 @@ class CISST_EXPORT mtsIntuitiveResearchKitPSM: public mtsIntuitiveResearchKitArm
     vctDoubleVec m_tool_engage_lower_position,
         m_tool_engage_upper_position;
 
-    mtsNeuralForceEstimation mForceEstimation;
+    mtsNeuralForceEstimation<3, 3> mForceEstimation;
+    mtsNeuralForceEstimation<3, 3> mWristForceEstimation;
     vctDoubleVec estimateExternalForces(const vctDoubleVec& totalForces, const vctDoubleVec& jp, const vctDoubleVec& jv) override;
 };
 

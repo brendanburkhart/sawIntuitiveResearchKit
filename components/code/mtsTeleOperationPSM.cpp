@@ -66,7 +66,9 @@ void mtsTeleOperationPSM::Arm::populateInterface(mtsInterfaceRequired* interface
     interfaceRequired->AddFunction("measured_cp", measured_cp);
     interfaceRequired->AddFunction("measured_cv", body_measured_cv);
     interfaceRequired->AddFunction("body/measured_cf", body_measured_cf);
+    interfaceRequired->AddFunction("external/measured_cf", body_external_cf);
     interfaceRequired->AddFunction("setpoint_cp", setpoint_cp);
+    interfaceRequired->AddFunction("setpoint_js", setpoint_js);
     interfaceRequired->AddFunction("servo_cpvf", servo_cpvf);
     interfaceRequired->AddFunction("use_gravity_compensation", use_gravity_compensation);
 }
@@ -101,9 +103,9 @@ prmStateCartesian mtsTeleOperationPSM::Arm::computeGoalFromTarget(Arm* target, c
     auto goalAngVelocity = target->m_body_measured_cv.VelocityAngular();
     auto targetVelocity = target->m_body_measured_cv.VelocityLinear();
 
-    // linear is scaled and re-oriented
+    // linear component is scaled and re-oriented
     goalState.Velocity().Ref<3>(0).Assign(size_scale * targetVelocity);
-    // angular is not scaled
+    // angular component is not scaled
     goalState.Velocity().Ref<3>(3).Assign(goalAngVelocity);
     goalState.VelocityIsDefined() = true;
 
@@ -112,6 +114,34 @@ prmStateCartesian mtsTeleOperationPSM::Arm::computeGoalFromTarget(Arm* target, c
 
     vct6 sum = (-targetForce) - localForce;
     goalState.Effort().Assign(sum);
+    goalState.EffortIsDefined() = true;
+
+    return goalState;
+}
+
+prmStateCartesian mtsTeleOperationPSM::ArmMTM::computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const
+{
+    auto goalState = Arm::computeGoalFromTarget(target, alignment_offset, size_scale);
+
+    vct6 targetForce = target->m_body_external_cf.Force();
+    vct6 localForce = m_body_external_cf.Force();
+
+    vct6 force_sum = (-targetForce) - localForce;
+    goalState.Effort().Assign(force_sum);
+    goalState.EffortIsDefined() = true;
+
+    return goalState;
+}
+
+prmStateCartesian mtsTeleOperationPSM::ArmPSM::computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const
+{
+    auto goalState = Arm::computeGoalFromTarget(target, alignment_offset, size_scale);
+
+    vct6 targetForce = target->m_body_external_cf.Force();
+    vct6 localForce = m_body_external_cf.Force();
+
+    vct6 force_sum = (-targetForce) - localForce;
+    goalState.Effort().Assign(force_sum);
     goalState.EffortIsDefined() = true;
 
     return goalState;
@@ -132,6 +162,7 @@ void mtsTeleOperationPSM::ArmPSM::populateInterface(mtsInterfaceRequired* interf
 
     interfaceRequired->AddFunction("hold", hold);
     interfaceRequired->AddFunction("jaw/setpoint_js", jaw_setpoint_js, MTS_OPTIONAL);
+    interfaceRequired->AddFunction("jaw/measured_js", jaw_measured_js, MTS_OPTIONAL);
     interfaceRequired->AddFunction("jaw/configuration_js", jaw_configuration_js, MTS_OPTIONAL);
     interfaceRequired->AddFunction("jaw/servo_jp", jaw_servo_jp, MTS_OPTIONAL);
 }
@@ -151,29 +182,43 @@ mtsTeleOperationPSM::Result mtsTeleOperationPSM::Arm::getData() {
     execution_result = body_measured_cf(m_body_measured_cf);
     if (!execution_result.IsOK()) { return Result(false, "call to body_measured_cf failed", execution_result); }
 
+    execution_result = body_external_cf(m_body_external_cf);
+    if (!execution_result.IsOK()) { return Result(false, "call to body_external_cf failed", execution_result); }
+
     execution_result = setpoint_cp(m_setpoint_cp);
     if (!execution_result.IsOK()) { return Result(false, "call to setpoint_cp failed", execution_result); }
+
+    execution_result = setpoint_js(m_setpoint_js);
+    if (!execution_result.IsOK()) { return Result(false, "call to setpoint_js failed", execution_result); }
 
     if (sampleDelay > 0) {
         cp_delay_buffer.push_back(m_measured_cp);
         cv_delay_buffer.push_back(m_body_measured_cv);
         cf_delay_buffer.push_back(m_body_measured_cf);
+        cf_external_delay_buffer.push_back(m_body_external_cf);
 
         // if someone *decreased* artifical latency while running
         while (cp_delay_buffer.size() > sampleDelay) {
             cp_delay_buffer.pop_front();
             cv_delay_buffer.pop_front();
             cf_delay_buffer.pop_front();
+            cf_external_delay_buffer.pop_front();
         }
+
+        double current_time = m_measured_cp.Timestamp();
 
         m_measured_cp = cp_delay_buffer.front();
         m_body_measured_cv = cv_delay_buffer.front();
         m_body_measured_cf = cf_delay_buffer.front();
+        m_body_external_cf = cf_external_delay_buffer.front();
+
+        double delayed_time = m_measured_cp.Timestamp();
 
         if (cp_delay_buffer.size() >= sampleDelay) {
             cp_delay_buffer.pop_front();
             cv_delay_buffer.pop_front();
             cf_delay_buffer.pop_front();
+            cf_external_delay_buffer.pop_front();
         }
     }
 
@@ -459,7 +504,7 @@ void mtsTeleOperationPSM::Configure(const Json::Value & jsonConfig)
                                      << ": \"artificial-latency-ms\" must be a non-negative number.  Found " << latency << std::endl;
             exit(EXIT_FAILURE);
         }
-        int sample_delay = (int)(latency * (0.001 / GetPeriodicity()));
+        int sample_delay = (int)(latency * (0.001 / (GetPeriodicity() + 0.00006)));
         mPSM.sampleDelay = sample_delay;
         mMTM.sampleDelay = sample_delay;
     }
@@ -1036,6 +1081,9 @@ void mtsTeleOperationPSM::TransitionAligningMTM(void)
         }
     }
 
+    // TODO: remember to remove
+    m_operator.is_active = true;
+
     // finally check for transition
     if ((orientationError <= m_operator.orientation_tolerance)
         && m_operator.is_active) {
@@ -1067,7 +1115,7 @@ void mtsTeleOperationPSM::EnterEnabled(void)
     if (!m_jaw.ignore) {
         m_jaw_caught_up_after_clutch = false;
         // gripper ghost
-        mPSM.jaw_setpoint_js(mPSM.m_jaw_setpoint_js);
+        mPSM.jaw_measured_js(mPSM.m_jaw_setpoint_js);
         if (mPSM.m_jaw_setpoint_js.Position().size() != 1) {
             mInterface->SendWarning(this->GetName() + ": unable to get jaw position.  Make sure there is an instrument on the PSM");
             mTeleopState.SetDesiredState("DISABLE");
@@ -1101,7 +1149,8 @@ void mtsTeleOperationPSM::EnterEnabled(void)
         set_following(true);
     }
 
-    force_data = {};
+    psm_js_data = {};
+    mtm_js_data = {};
 }
 
 void mtsTeleOperationPSM::UnilateralTeleop() {
@@ -1113,7 +1162,7 @@ void mtsTeleOperationPSM::UnilateralTeleop() {
 void mtsTeleOperationPSM::BilateralTeleop() {
     mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM, m_alignment_offset_initial, m_scale);
     mMTM.m_servo_cpvf = mMTM.computeGoalFromTarget(&mPSM, m_alignment_offset_initial.Inverse(), 1.0 / m_scale);
-
+    
     mMTM.servo_cpvf(mMTM.m_servo_cpvf);
     mPSM.servo_cpvf(mPSM.m_servo_cpvf);
 }
@@ -1158,15 +1207,25 @@ void mtsTeleOperationPSM::RunEnabled(void)
         break;
     }
 
-    vct6 jp;
-    vct6 jv;
-    vct6 jf;
+    vct6 psm_jp;
+    vct6 psm_jv;
+    vct6 psm_jf;
 
-    jp.Assign(mPSM.m_measured_js.Position());
-    jv.Assign(mPSM.m_measured_js.Velocity());
-    jf.Assign(mPSM.m_measured_js.Effort());
+    psm_jp.Assign(mPSM.m_measured_js.Position().Ref(6));
+    psm_jv.Assign(mPSM.m_measured_js.Velocity().Ref(6));
+    psm_jf.Assign(mPSM.m_measured_js.Effort().Ref(6));
 
-    force_data.emplace_back(jp, jv, jf);
+    psm_js_data.emplace_back(psm_jp, psm_jv, psm_jf);
+
+    vct7 mtm_jp;
+    vct7 mtm_jv;
+    vct7 mtm_jf;
+
+    mtm_jp.Assign(mMTM.m_measured_js.Position().Ref(7));
+    mtm_jv.Assign(mMTM.m_measured_js.Velocity().Ref(7));
+    mtm_jf.Assign(mMTM.m_measured_js.Effort().Ref(7));
+
+    mtm_js_data.emplace_back(mtm_jp, mtm_jv, mtm_jf);
 
     if (m_jaw.ignore) {
         return;
@@ -1185,26 +1244,60 @@ void mtsTeleOperationPSM::RunEnabled(void)
                 m_jaw_caught_up_after_clutch = true;
             }
         }
+
         // pick the rate based on back from clutch or not
         const double delta = m_jaw_caught_up_after_clutch ?
             m_jaw.rate * StateTable.PeriodStats.PeriodAvg()
             : m_jaw.rate_back_from_clutch * StateTable.PeriodStats.PeriodAvg();
-        // gripper ghost below, add to catch up
-        if (m_gripper_ghost <= (currentGripper - delta)) {
-            m_gripper_ghost += delta;
+        const double error = std::min(delta, std::fabs(currentGripper - m_gripper_ghost));
+        m_gripper_ghost += std::copysign(error, currentGripper - m_gripper_ghost);
+        m_gripper_ghost = std::max(m_gripper_ghost, m_gripper_to_jaw.position_min);
+        mPSM.m_jaw_servo_jp.Goal()[0] = GripperToJaw(m_gripper_ghost);
+        mPSM.jaw_servo_jp(mPSM.m_jaw_servo_jp);
+    }
+}
+
+void write_header(std::ostream& file, int joints) {
+    for (int j = 0; j < joints; j++) {
+            file << "jp_" << j << ",";
+    }
+
+    for (int j = 0; j < joints; j++) {
+        file << "jv_" << j << ",";
+    }
+
+    for (int j = 0; j < joints; j++) {
+        file << "jf_" << j;
+        if (j == joints-1) {
+            file << "\n";
         } else {
-            // gripper ghost above, subtract to catch up
-            if (m_gripper_ghost >= (currentGripper + delta)) {
-                m_gripper_ghost -= delta;
+            file << ",";
+        }
+    }
+}
+
+template <int joints>
+void save_js_data(std::string output_file, const std::vector<std::tuple<vctFixedSizeVector<double, joints>, vctFixedSizeVector<double, joints>, vctFixedSizeVector<double, joints>>>& data) {
+    std::ofstream file(output_file);
+    write_header(file, joints);
+
+    for (auto& row : data) {
+        for (int j = 0; j < joints; j++) {
+            file << (std::get<0>(row))[j] << ",";
+        }
+        
+        for (int j = 0; j < joints; j++) {
+            file << (std::get<1>(row))[j] << ",";
+        }
+
+        for (int j = 0; j < joints; j++) {
+            file << (std::get<2>(row))[j];
+            if (j < 5) {
+                file << ",";
             }
         }
-        mPSM.m_jaw_servo_jp.Goal()[0] = GripperToJaw(m_gripper_ghost);
-        // make sure we don't send goal past joint limits
-        if (mPSM.m_jaw_servo_jp.Goal()[0] < m_gripper_to_jaw.position_min) {
-            mPSM.m_jaw_servo_jp.Goal()[0] = m_gripper_to_jaw.position_min;
-            m_gripper_ghost = JawToGripper(m_gripper_to_jaw.position_min);
-        }
-        mPSM.jaw_servo_jp(mPSM.m_jaw_servo_jp);
+
+        file << "\n";
     }
 }
 
@@ -1214,26 +1307,19 @@ void mtsTeleOperationPSM::TransitionEnabled(void)
         set_following(false);
         mTeleopState.SetCurrentState(mTeleopState.DesiredState());
 
-        std::ofstream file(force_data_output_file);
-        file << "jp_0,jp_1,jp_2,jp_3,jp_4,jp_5,jv_0,jv_1,jv_2,jv_3,jv_4,jv_5,jf_0,jf_1,jf_2,jf_3,jf_4,jf_5\n";
-        for (auto& row : force_data) {
-            for (int j = 0; j < 6; j++) {
-                file << (std::get<0>(row))[j] << ",";
-            }
+        mPSM.m_servo_cpvf.PositionIsDefined() = false;
+        mPSM.m_servo_cpvf.VelocityIsDefined() = false;
+        mPSM.m_servo_cpvf.EffortIsDefined() = false;
 
-            for (int j = 0; j < 6; j++) {
-                file << (std::get<1>(row))[j] << ",";
-            }
+        mMTM.m_servo_cpvf.PositionIsDefined() = false;
+        mMTM.m_servo_cpvf.VelocityIsDefined() = false;
+        mMTM.m_servo_cpvf.EffortIsDefined() = false;
 
-            for (int j = 0; j < 6; j++) {
-                file << (std::get<2>(row))[j];
-                if (j < 5) {
-                    file << ",";
-                }
-            }
+        mPSM.servo_cpvf(mPSM.m_servo_cpvf);
+        mMTM.servo_cpvf(mMTM.m_servo_cpvf);
 
-            file << "\n";
-        }
+        save_js_data<6>(js_data_output_folder + "psm_js.csv", psm_js_data);
+        save_js_data<7>(js_data_output_folder + "mtm_js.csv", mtm_js_data);
     }
 }
 

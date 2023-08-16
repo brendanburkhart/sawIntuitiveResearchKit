@@ -18,23 +18,54 @@ http://www.cisst.org/cisst/license.txt.
 #define _mtsNeuralForceEstimation_h
 
 #include <memory>
+#include <iostream>
+#include <string>
 
 #include <cisstVector/vctDynamicMatrixTypes.h>
 #include <cisstVector/vctDynamicVectorTypes.h>
 
 #include <../onnxruntime/include/onnxruntime_cxx_api.h>
-#include <string>
 
+class shape_t {
+public:
+    shape_t(std::vector<std::int64_t> value);
+
+    std::vector<std::int64_t> value;
+
+    std::size_t ndim() const;
+    std::int64_t size() const;
+    std::int64_t operator[](size_t) const;
+
+    bool operator==(const shape_t& shape) const;
+    bool operator!=(const shape_t& shape) const;
+
+    void replace_unknowns();
+    std::int64_t* data();
+    const std::int64_t* data() const;
+};
+
+std::ostream& operator<<(std::ostream& s, const shape_t& shape);
+
+template <size_t input, size_t output>
 class mtsNeuralForceEstimation {
-protected:
+private:
     bool is_loaded;
 
     Ort::Env environment;
     std::unique_ptr<Ort::Session> session;
 
-    std::vector<std::int64_t> input_shapes;
+    std::vector<shape_t> input_shapes;
     std::vector<std::string> input_names;
+    std::vector<const char*> input_names_char;
+
+    std::vector<shape_t> output_shapes;
     std::vector<std::string> output_names;
+    std::vector<const char*> output_names_char;
+
+    std::vector<Ort::Value> internal_states;
+
+    bool Validate();
+    void InitializeState();
 
 public:
     mtsNeuralForceEstimation();
@@ -44,7 +75,9 @@ public:
 
     bool Ready() const;
     
-    vctDoubleVec infer_jf(const vctDoubleVec& jp, const vctDoubleVec& jv);
+    using input_t = vctFixedSizeVector<double, input>;
+    using output_t = vctFixedSizeVector<double, output>;
+    output_t infer_jf(const input_t& jp, const input_t& jv);
 };
 
 #endif

@@ -62,7 +62,7 @@
 	    "nominal_mass": 0.000005,
 	    "disturbance_cutoff": 6.0,
 	    "effort_low_pass_cutoff_frequency": 0.01,
-	    "f_gain": 0.0
+	    "f_gain": 0.4
 	}
 	,
 	{
@@ -79,7 +79,7 @@
 	    "nominal_mass": 0.000005,
 	    "disturbance_cutoff": 6.0,
 	    "effort_low_pass_cutoff_frequency": 0.01,
-	    "f_gain": 0.0
+	    "f_gain": 0.4
 	}
 	,
 	{
@@ -96,7 +96,7 @@
 	    "nominal_mass": 0.000005,
 	    "disturbance_cutoff": 6.0,
 	    "effort_low_pass_cutoff_frequency": 0.01,
-	    "f_gain": 0.0
+	    "f_gain": 0.4
 	}
 	,
 	{
@@ -113,7 +113,7 @@
 	    "nominal_mass": 0.000005,
 	    "disturbance_cutoff": 6.0,
 	    "effort_low_pass_cutoff_frequency": 0.01,
-	    "f_gain": 0.0
+	    "f_gain": 0.4
 	}
     ]
 }

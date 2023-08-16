@@ -245,6 +245,7 @@ void mtsIntuitiveResearchKitArm::Init(void)
     m_servo_jf.ForceTorque().Zeros();
     m_body_measured_cf.SetValid(false);
     m_spatial_measured_cf.SetValid(false);
+    m_body_external_cf.SetValid(false);
 
     // efforts computed by gravity compensation
     m_gravity_compensation_setpoint_js.SetSize(number_of_joints_kinematics());
@@ -310,6 +311,9 @@ void mtsIntuitiveResearchKitArm::Init(void)
     m_spatial_measured_cf.SetAutomaticTimestamp(false); // keep PID timestamp
     this->StateTable.AddData(m_spatial_measured_cf, "spatial/measured_cf");
 
+    m_body_external_cf.SetAutomaticTimestamp(false); // keep PID timestamp
+    this->StateTable.AddData(m_body_external_cf, "external/measured_cf");
+
     m_kin_measured_js.SetAutomaticTimestamp(false); // keep PID timestamp
     this->StateTable.AddData(m_kin_measured_js, "kin/measured_js");
 
@@ -367,6 +371,7 @@ void mtsIntuitiveResearchKitArm::Init(void)
         // Get
         m_arm_interface->AddCommandReadState(this->mStateTableConfiguration, m_kin_configuration_js, "configuration_js");
         m_arm_interface->AddCommandReadState(this->StateTable, m_kin_measured_js, "measured_js");
+        m_arm_interface->AddCommandReadState(this->StateTable, m_kin_error_js, "error/measured_js");
         m_arm_interface->AddCommandReadState(this->StateTable, m_kin_setpoint_js, "setpoint_js");
         m_arm_interface->AddCommandReadState(this->StateTable, m_gravity_compensation_setpoint_js, "gravity_compensation/setpoint_js");
         m_arm_interface->AddCommandReadState(this->StateTable, m_local_measured_cp, "local/measured_cp");
@@ -383,6 +388,7 @@ void mtsIntuitiveResearchKitArm::Init(void)
         m_arm_interface->AddCommandReadState(this->StateTable, m_body_jacobian, "body/jacobian");
         m_arm_interface->AddCommandReadState(this->StateTable, m_spatial_measured_cf, "spatial/measured_cf");
         m_arm_interface->AddCommandReadState(this->StateTable, m_spatial_jacobian, "spatial/jacobian");
+        m_arm_interface->AddCommandReadState(this->StateTable, m_body_external_cf, "external/measured_cf");
         m_arm_interface->AddCommandReadState(this->mStateTableState,
                                              m_operating_state, "operating_state");
         // Set
@@ -1019,7 +1025,7 @@ void mtsIntuitiveResearchKitArm::get_robot_data(void)
         auto measured_joint_efforts = m_kin_measured_js.Effort();
         auto external_joint_forces = estimateExternalForces(measured_joint_efforts, m_kin_measured_js.Position(), m_kin_measured_js.Velocity());
 
-        force.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), external_joint_forces);
+        force.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), measured_joint_efforts);
         if (true/*m_body_cf_orientation_absolute*/) {
             // forces
             relative.Assign(force.Ref(3, 0));
@@ -1036,10 +1042,27 @@ void mtsIntuitiveResearchKitArm::get_robot_data(void)
         m_body_measured_cf.SetValid(true);
         m_body_measured_cf.SetTimestamp(m_kin_measured_js.Timestamp());
 
+        force.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), external_joint_forces);
+        if (true/*m_body_cf_orientation_absolute*/) {
+            // forces
+            relative.Assign(force.Ref(3, 0));
+            m_measured_cp_frame.Rotation().ApplyTo(relative, absolute);
+            m_body_external_cf.Force().Ref<3>(0).Assign(absolute);
+            // torques
+            relative.Assign(force.Ref(3, 3));
+            m_measured_cp_frame.Rotation().ApplyTo(relative, absolute);
+            m_body_external_cf.Force().Ref<3>(3).Assign(absolute);
+        } else {
+            m_body_external_cf.Force().Assign(force);
+        }
+        // valid/timestamp
+        m_body_external_cf.SetValid(true);
+        m_body_external_cf.SetTimestamp(m_kin_measured_js.Timestamp());
+
         m_spatial_jacobian_transpose.Assign(m_spatial_jacobian.Transpose());
         nmrPInverse(m_spatial_jacobian_transpose, m_jacobian_transpose_pinverse_data);
 
-        force.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), external_joint_forces);
+        force.ProductOf(m_jacobian_transpose_pinverse_data.PInverse(), measured_joint_efforts);
         vctDouble6 spatial_force;
         spatial_force.Assign(force);
         m_spatial_measured_cf.Force().Ref<3>(0).ProductOf(m_base_frame.Rotation(), spatial_force.Ref<3>(0));
@@ -1101,6 +1124,7 @@ void mtsIntuitiveResearchKitArm::get_robot_data(void)
         m_spatial_measured_cv.SetValid(false);
         m_body_measured_cf.SetValid(false);
         m_spatial_measured_cf.SetValid(false);
+        m_body_external_cf.SetValid(false);
         // update cartesian position desired
         m_local_setpoint_cp_frame.Assign(vctFrm4x4::Identity());
         m_setpoint_cp_frame.Assign(vctFrm4x4::Identity());
@@ -2016,6 +2040,11 @@ void mtsIntuitiveResearchKitArm::hold(void)
     // set goal
     m_servo_jp.Assign(m_kin_setpoint_js.Position(), number_of_joints_kinematics());
     m_pid_new_goal = true;
+
+    // turn off feedfoward
+    vctDoubleVec jf(number_of_joints_kinematics());
+    jf.Zeros();
+    feed_forward_jf_internal(jf);
 }
 
 void mtsIntuitiveResearchKitArm::free(void)

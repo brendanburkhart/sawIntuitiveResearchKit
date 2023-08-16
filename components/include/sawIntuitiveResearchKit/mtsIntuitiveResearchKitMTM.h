@@ -149,7 +149,7 @@ protected:
 
     double m_platform_gain = mtsIntuitiveResearchKit::MTMPlatform::Gain;
 
-    mtsNeuralForceEstimation mForceEstimation;
+    mtsNeuralForceEstimation<3, 3> mForceEstimation;
     vctDoubleVec estimateExternalForces(const vctDoubleVec& totalForces, const vctDoubleVec& jp, const vctDoubleVec& jv) override;
 };
 

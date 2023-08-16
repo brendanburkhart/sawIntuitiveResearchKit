@@ -139,7 +139,9 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
         mtsFunctionRead  measured_js;
         mtsFunctionRead  body_measured_cv;
         mtsFunctionRead  body_measured_cf;
+        mtsFunctionRead  body_external_cf;
         mtsFunctionRead  setpoint_cp;
+        mtsFunctionRead  setpoint_js;
 
         mtsFunctionWrite servo_cpvf;
 
@@ -152,7 +154,9 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
         prmPositionCartesianGet m_measured_cp;
         prmVelocityCartesianGet m_body_measured_cv;
         prmForceCartesianGet    m_body_measured_cf;
+        prmForceCartesianGet    m_body_external_cf;
         prmStateJoint           m_measured_js;
+        prmStateJoint           m_setpoint_js;
         prmPositionCartesianGet m_setpoint_cp;
         prmStateCartesian       m_servo_cpvf;
 
@@ -160,11 +164,13 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
         std::deque<prmPositionCartesianGet> cp_delay_buffer;
         std::deque<prmVelocityCartesianGet> cv_delay_buffer;
         std::deque<prmForceCartesianGet> cf_delay_buffer;
+        std::deque<prmForceCartesianGet> cf_external_delay_buffer;
     };
 
     class ArmMTM : public Arm {
     public:
         void populateInterface(mtsInterfaceRequired* interfaceRequired) override;
+        prmStateCartesian computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const override;
 
         Result getData() override;
 
@@ -184,11 +190,13 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     class ArmPSM : public Arm {
     public:
         void populateInterface(mtsInterfaceRequired* interfaceRequired) override;
+        prmStateCartesian computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const override;
 
         Result getData() override;
 
         mtsFunctionVoid  hold;
         mtsFunctionRead  jaw_setpoint_js;
+        mtsFunctionRead  jaw_measured_js;
         mtsFunctionRead  jaw_configuration_js;
         mtsFunctionWrite jaw_servo_jp;
 
@@ -273,8 +281,10 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     bool m_following;
     void set_following(const bool following);
 
-    std::vector<std::tuple<vct6, vct6, vct6>> force_data;
-    std::string force_data_output_file = "/home/bburkha4/catkin_ws/src/dvrk-ros/dvrk_python/scripts/data/psm_js_test.csv";
+    std::vector<std::tuple<vct6, vct6, vct6>> psm_js_data;
+    std::vector<std::tuple<vct7, vct7, vct7>> mtm_js_data;
+
+    std::string js_data_output_folder = "/home/bburkha4/catkin_ws/src/dvrk-ros/dvrk_python/scripts/data/";
 };
 
 CMN_DECLARE_SERVICES_INSTANTIATION(mtsTeleOperationPSM);
