@@ -145,8 +145,6 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
 
         mtsFunctionWrite servo_cpvf;
 
-        mtsFunctionWrite use_gravity_compensation;
-
         vctFrm4x4 CartesianInitial;
 
         prmPositionCartesianGet m_initial_cp;
