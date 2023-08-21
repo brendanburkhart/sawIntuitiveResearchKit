@@ -70,7 +70,6 @@ void mtsTeleOperationPSM::Arm::populateInterface(mtsInterfaceRequired* interface
     interfaceRequired->AddFunction("setpoint_cp", setpoint_cp);
     interfaceRequired->AddFunction("setpoint_js", setpoint_js);
     interfaceRequired->AddFunction("servo_cpvf", servo_cpvf);
-    interfaceRequired->AddFunction("use_gravity_compensation", use_gravity_compensation);
 }
 
 prmStateCartesian mtsTeleOperationPSM::Arm::computeGoalFromTarget(Arm* target, double size_scale) const
@@ -242,7 +241,7 @@ void mtsTeleOperationPSM::ArmMTM::populateInterface(mtsInterfaceRequired* interf
     interfaceRequired->AddFunction("gripper/measured_js", gripper_measured_js, MTS_OPTIONAL);
     interfaceRequired->AddFunction("lock_orientation", lock_orientation, MTS_OPTIONAL);
     interfaceRequired->AddFunction("unlock_orientation", unlock_orientation, MTS_OPTIONAL);
-    interfaceRequired->AddFunction("body/servo_cf", body_servo_cf);
+    interfaceRequired->AddFunction("body/servo_cf", body_servo_cf, MTS_OPTIONAL);
 }
 
 void mtsTeleOperationPSM::ArmPSM::populateInterface(mtsInterfaceRequired* interfaceRequired) {
@@ -475,8 +474,6 @@ void mtsTeleOperationPSM::Init(void)
                                     "lock_translation", m_translation_locked);
         mInterface->AddCommandWrite(&mtsTeleOperationPSM::set_align_mtm, this,
                                     "set_align_mtm", m_align_mtm);
-        mInterface->AddCommandWrite(&mtsTeleOperationPSM::following_mtm_body_servo_cf, this,
-                                    "following/mtm/body/servo_cf");
         mInterface->AddCommandReadState(*(mConfigurationStateTable),
                                         m_scale,
                                         "scale");
@@ -982,11 +979,6 @@ void mtsTeleOperationPSM::set_align_mtm(const bool & alignMTM)
     }
 }
 
-void mtsTeleOperationPSM::following_mtm_body_servo_cf(const prmForceCartesianSet & wrench)
-{
-    m_following_mtm_body_servo_cf = wrench;
-}
-
 void mtsTeleOperationPSM::StateChanged(void)
 {
     const std::string newState = mTeleopState.CurrentState();
@@ -1243,9 +1235,6 @@ void mtsTeleOperationPSM::TransitionAligningMTM(void)
         }
     }
 
-    // TODO: remember to remove
-    m_operator.is_active = true;
-
     // finally check for transition
     if ((orientationError <= m_operator.orientation_tolerance)
         && m_operator.is_active) {
@@ -1286,7 +1275,6 @@ void mtsTeleOperationPSM::EnterEnabled(void)
         m_gripper_ghost = JawToGripper(currentJaw);
     }
 
-    // set MTM/PSM to Teleop (Cartesian Position Mode)
     // orientation locked or not
     if (m_rotation_locked
         && mMTM1.lock_orientation.IsValid()) {
@@ -1526,6 +1514,4 @@ void mtsTeleOperationPSM::set_following(const bool following)
 {
     MessageEvents.following(following);
     m_following = following;
-    // reset user servo_cf at each transition
-    m_following_mtm_body_servo_cf.SetValid(false);
 }
