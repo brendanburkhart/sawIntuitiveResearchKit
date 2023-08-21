@@ -59,7 +59,7 @@ mtsTeleOperationPSMQtWidget::mtsTeleOperationPSMQtWidget(const std::string & com
         interfaceRequired->AddFunction("lock_rotation", TeleOperation.lock_rotation);
         interfaceRequired->AddFunction("lock_translation", TeleOperation.lock_translation);
         interfaceRequired->AddFunction("set_align_mtm", TeleOperation.set_align_mtm);
-        interfaceRequired->AddFunction("MTM/measured_cp", TeleOperation.MTM_measured_cp);
+        interfaceRequired->AddFunction("MTM1/measured_cp", TeleOperation.MTM_measured_cp);
         interfaceRequired->AddFunction("PSM/setpoint_cp", TeleOperation.PSM_setpoint_cp);
         interfaceRequired->AddFunction("align_mtm", TeleOperation.align_mtm);
         interfaceRequired->AddFunction("alignment_offset", TeleOperation.alignment_offset);

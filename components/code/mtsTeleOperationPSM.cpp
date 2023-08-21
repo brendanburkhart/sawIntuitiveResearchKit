@@ -73,7 +73,7 @@ void mtsTeleOperationPSM::Arm::populateInterface(mtsInterfaceRequired* interface
     interfaceRequired->AddFunction("use_gravity_compensation", use_gravity_compensation);
 }
 
-prmStateCartesian mtsTeleOperationPSM::Arm::computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const
+prmStateCartesian mtsTeleOperationPSM::Arm::computeGoalFromTarget(Arm* target, double size_scale) const
 {
     // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     // NOTE: we need take into account changes in PSM base frame if any
@@ -90,7 +90,7 @@ prmStateCartesian mtsTeleOperationPSM::Arm::computeGoalFromTarget(Arm* target, c
     vct3 goalTranslation = CartesianInitial.Translation() + size_scale * relativeTranslation;
 
     // rotation
-    vctMatRot3 goalRotation = vctMatRot3(targetPosition.Rotation() * alignment_offset);
+    vctMatRot3 goalRotation = vctMatRot3(targetPosition.Rotation());
 
     // desired Cartesian position
     vctFrm4x4 goalPosition;
@@ -119,9 +119,9 @@ prmStateCartesian mtsTeleOperationPSM::Arm::computeGoalFromTarget(Arm* target, c
     return goalState;
 }
 
-prmStateCartesian mtsTeleOperationPSM::ArmMTM::computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const
+prmStateCartesian mtsTeleOperationPSM::ArmMTM::computeGoalFromTarget(Arm* target, double size_scale) const
 {
-    auto goalState = Arm::computeGoalFromTarget(target, alignment_offset, size_scale);
+    auto goalState = Arm::computeGoalFromTarget(target, size_scale);
 
     vct6 targetForce = target->m_body_external_cf.Force();
     vct6 localForce = m_body_external_cf.Force();
@@ -133,9 +133,9 @@ prmStateCartesian mtsTeleOperationPSM::ArmMTM::computeGoalFromTarget(Arm* target
     return goalState;
 }
 
-prmStateCartesian mtsTeleOperationPSM::ArmPSM::computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const
+prmStateCartesian mtsTeleOperationPSM::ArmPSM::computeGoalFromTarget(Arm* target, double size_scale) const
 {
-    auto goalState = Arm::computeGoalFromTarget(target, alignment_offset, size_scale);
+    auto goalState = Arm::computeGoalFromTarget(target, size_scale);
 
     vct6 targetForce = target->m_body_external_cf.Force();
     vct6 localForce = m_body_external_cf.Force();
@@ -144,6 +144,94 @@ prmStateCartesian mtsTeleOperationPSM::ArmPSM::computeGoalFromTarget(Arm* target
     goalState.Effort().Assign(force_sum);
     goalState.EffortIsDefined() = true;
 
+    return goalState;
+}
+
+vctQuatRot3 slerp(vctQuatRot3 a, vctQuatRot3 b, double alpha)
+{
+    double cosHalfTheta = vctDotProduct(a, b);
+    if (cosHalfTheta < 0.0) {
+        a = vctQuatRot3(-a.X(), -a.Y(), -a.Z(), -a.R());
+        cosHalfTheta = -cosHalfTheta;
+    }
+
+    cosHalfTheta = std::max(0.0, std::min(1.0, cosHalfTheta)); // clamp
+    double halfTheta = std::acos(cosHalfTheta);
+    double sinHalfTheta = std::sqrt(1.0 - cosHalfTheta * cosHalfTheta);
+
+    if (std::abs(cosHalfTheta) >= 1.0) {
+        return a;
+    } else if (sinHalfTheta < 1e-5) {
+        auto x = (1.0 - alpha) * a + alpha * b;
+        return vctQuatRot3(x.X(), x.Y(), x.Z(), x.W());
+    } else {
+        double rA = std::sin((1.0 - alpha) * halfTheta) / sinHalfTheta;
+        double rB = std::sin(alpha * halfTheta) / sinHalfTheta;
+
+        auto x = rA * a + rB * b;
+        return vctQuatRot3(x.X(), x.Y(), x.Z(), x.W());
+    }
+}
+
+prmStateCartesian mtsTeleOperationPSM::Arm::computeGoalFromTarget(Arm* target_a, Arm* target_b, double alpha, double size_scale_a, double size_scale_b) const
+{
+    prmStateCartesian goalState;
+
+    vctFrm4x4 position(m_measured_cp.Position());
+    vctFrm4x4 targetPositionA(target_a->m_measured_cp.Position());
+    vctFrm4x4 targetPositionB(target_b->m_measured_cp.Position());
+
+    // translation
+    vct3 relativeTranslationA = size_scale_a * (targetPositionA.Translation() - target_a->CartesianInitial.Translation());
+    vct3 relativeTranslationB = size_scale_b * (targetPositionB.Translation() - target_b->CartesianInitial.Translation());
+    vct3 goalTranslation = CartesianInitial.Translation() + alpha * relativeTranslationA + (1 - alpha) * relativeTranslationB;
+
+    // rotation
+    auto quatA = vctQuatRot3(targetPositionA.Rotation());
+    auto quatB = vctQuatRot3(targetPositionB.Rotation());
+    vctMatRot3 goalRotation = vctMatRot3(slerp(quatA, quatB, alpha));
+
+    // desired Cartesian position
+    vctFrm4x4 goalPosition;
+    goalPosition.Translation().Assign(goalTranslation);
+    goalPosition.Rotation().FromNormalized(goalRotation);
+
+    goalState.Position().FromNormalized(goalPosition);
+    goalState.PositionIsDefined() = true;
+
+    auto targetAngVelocityA = size_scale_a * target_a->m_body_measured_cv.VelocityAngular();
+    auto targetAngVelocityB = size_scale_b * target_b->m_body_measured_cv.VelocityAngular();
+    auto targetVelocityA = size_scale_a * target_a->m_body_measured_cv.VelocityLinear();
+    auto targetVelocityB = size_scale_b * target_b->m_body_measured_cv.VelocityLinear();
+
+    auto targetAngVelocity = alpha * targetAngVelocityA + (1 - alpha) * targetAngVelocityB;
+    auto targetVelocity = alpha * targetVelocityA + (1 - alpha) * targetVelocityB;
+
+    // linear component is scaled and re-oriented
+    goalState.Velocity().Ref<3>(0).Assign(targetVelocity);
+    // angular component is not scaled
+    goalState.Velocity().Ref<3>(3).Assign(targetAngVelocity);
+    goalState.VelocityIsDefined() = true;
+
+    vct6 targetForce = alpha * target_a->m_body_measured_cf.Force() + (1 - alpha) * target_b->m_body_measured_cf.Force();
+    vct6 localForce = m_body_measured_cf.Force();
+
+    vct6 sum = (-targetForce) - localForce;
+    goalState.Effort().Assign(sum);
+    goalState.EffortIsDefined() = true;
+
+    return goalState;
+}
+
+prmStateCartesian mtsTeleOperationPSM::ArmMTM::computeGoalFromTarget(Arm* target_a, Arm* target_b, double alpha, double size_scale_a, double size_scale_b) const
+{
+    auto goalState = Arm::computeGoalFromTarget(target_a, target_b, alpha, size_scale_a, size_scale_b);
+    return goalState;
+}
+
+prmStateCartesian mtsTeleOperationPSM::ArmPSM::computeGoalFromTarget(Arm* target_a, Arm* target_b, double alpha, double size_scale_a, double size_scale_b) const
+{
+    auto goalState = Arm::computeGoalFromTarget(target_a, target_b, alpha, size_scale_a, size_scale_b);
     return goalState;
 }
 
@@ -308,12 +396,20 @@ void mtsTeleOperationPSM::Init(void)
 
     mPSM.m_jaw_servo_jp.Goal().SetSize(1);
 
-    this->StateTable.AddData(mMTM.m_measured_cp, "MTM/measured_cp");
-    this->StateTable.AddData(mMTM.m_initial_cp, "MTM/initial_cp");
-    this->StateTable.AddData(mMTM.m_body_measured_cv, "MTM/measured_cv");
-    this->StateTable.AddData(mMTM.m_body_measured_cf, "MTM/body_measured_cf");
-    this->StateTable.AddData(mMTM.m_setpoint_cp, "MTM/setpoint_cp");
-    this->StateTable.AddData(mMTM.m_setpoint_cp, "MTM/setpoint_cp");
+    this->StateTable.AddData(mMTM1.m_measured_cp, "MTM1/measured_cp");
+    this->StateTable.AddData(mMTM1.m_initial_cp, "MTM1/initial_cp");
+    this->StateTable.AddData(mMTM1.m_body_measured_cv, "MTM1/measured_cv");
+    this->StateTable.AddData(mMTM1.m_body_measured_cf, "MTM1/body_measured_cf");
+    this->StateTable.AddData(mMTM1.m_setpoint_cp, "MTM1/setpoint_cp");
+    this->StateTable.AddData(mMTM1.m_setpoint_cp, "MTM1/setpoint_cp");
+
+    this->StateTable.AddData(mMTM2.m_measured_cp, "MTM2/measured_cp");
+    this->StateTable.AddData(mMTM2.m_initial_cp, "MTM2/initial_cp");
+    this->StateTable.AddData(mMTM2.m_body_measured_cv, "MTM2/measured_cv");
+    this->StateTable.AddData(mMTM2.m_body_measured_cf, "MTM2/body_measured_cf");
+    this->StateTable.AddData(mMTM2.m_setpoint_cp, "MTM2/setpoint_cp");
+    this->StateTable.AddData(mMTM2.m_setpoint_cp, "MTM2/setpoint_cp");
+
     this->StateTable.AddData(mPSM.m_measured_cp, "PSM/measured_cp");
     this->StateTable.AddData(mPSM.m_initial_cp, "PSM/initial_cp");
     this->StateTable.AddData(mPSM.m_body_measured_cv, "PSM/measured_cv");
@@ -330,9 +426,16 @@ void mtsTeleOperationPSM::Init(void)
     mConfigurationStateTable->AddData(m_align_mtm, "align_mtm");
 
     // setup cisst interfaces
-    mtsInterfaceRequired * interfaceRequired = AddInterfaceRequired("MTM");
+    mtsInterfaceRequired * interfaceRequired = AddInterfaceRequired("MTM1");
     if (interfaceRequired) {
-        mMTM.populateInterface(interfaceRequired);
+        mMTM1.populateInterface(interfaceRequired);
+        interfaceRequired->AddEventHandlerWrite(&mtsTeleOperationPSM::MTMErrorEventHandler, 
+                                                this, "error");
+    }
+
+    interfaceRequired = AddInterfaceRequired("MTM2");
+    if (interfaceRequired) {
+        mMTM2.populateInterface(interfaceRequired);
         interfaceRequired->AddEventHandlerWrite(&mtsTeleOperationPSM::MTMErrorEventHandler, 
                                                 this, "error");
     }
@@ -384,11 +487,11 @@ void mtsTeleOperationPSM::Init(void)
         mInterface->AddCommandReadState(*(mConfigurationStateTable),
                                         m_align_mtm, "align_mtm");
         mInterface->AddCommandReadState(this->StateTable,
-                                        mMTM.m_measured_cp,
-                                        "MTM/measured_cp");
+                                        mMTM1.m_measured_cp,
+                                        "MTM1/measured_cp");
         mInterface->AddCommandReadState(this->StateTable,
-                                        mMTM.m_body_measured_cv,
-                                        "MTM/measured_cv");
+                                        mMTM1.m_body_measured_cv,
+                                        "MTM1/measured_cv");
         mInterface->AddCommandReadState(this->StateTable,
                                         mPSM.m_setpoint_cp,
                                         "PSM/setpoint_cp");
@@ -397,8 +500,8 @@ void mtsTeleOperationPSM::Init(void)
                                         "alignment_offset");
 
         mInterface->AddCommandReadState(this->StateTable,
-                                        mMTM.m_initial_cp,
-                                        "MTM/initial/measured_cp");
+                                        mMTM1.m_initial_cp,
+                                        "MTM1/initial/measured_cp");
 
         mInterface->AddCommandReadState(this->StateTable,
                                         mPSM.m_initial_cp,
@@ -506,7 +609,8 @@ void mtsTeleOperationPSM::Configure(const Json::Value & jsonConfig)
         }
         int sample_delay = (int)(latency * (0.001 / (GetPeriodicity() + 0.00006)));
         mPSM.sampleDelay = sample_delay;
-        mMTM.sampleDelay = sample_delay;
+        mMTM1.sampleDelay = sample_delay;
+        mMTM2.sampleDelay = sample_delay;
     }
 
     // read orientation if present
@@ -692,22 +796,33 @@ void mtsTeleOperationPSM::Clutch(const bool & clutch)
         // keep track of last follow mode
         m_operator.was_active_before_clutch = m_operator.is_active;
         set_following(false);
-        mMTM.m_move_cp.Goal().Rotation().FromNormalized(mPSM.m_setpoint_cp.Position().Rotation());
-        mMTM.m_move_cp.Goal().Translation().Assign(mMTM.m_measured_cp.Position().Translation());
+        mMTM1.m_move_cp.Goal().Rotation().FromNormalized(mPSM.m_setpoint_cp.Position().Rotation());
+        mMTM1.m_move_cp.Goal().Translation().Assign(mMTM1.m_measured_cp.Position().Translation());
+
+        mMTM2.m_move_cp.Goal().Rotation().FromNormalized(mPSM.m_setpoint_cp.Position().Rotation());
+        mMTM2.m_move_cp.Goal().Translation().Assign(mMTM2.m_measured_cp.Position().Translation());
+
         mInterface->SendStatus(this->GetName() + ": console clutch pressed");
 
-        // no force applied but gravity and locked orientation
-        prmForceCartesianSet wrench;
-        mMTM.body_servo_cf(wrench);
-        mMTM.use_gravity_compensation(true);
         if ((m_align_mtm || m_rotation_locked)
-            && mMTM.lock_orientation.IsValid()) {
+            && mMTM1.lock_orientation.IsValid()) {
             // lock in current position
-            mMTM.lock_orientation(mMTM.m_measured_cp.Position().Rotation());
+            mMTM1.lock_orientation(mMTM1.m_measured_cp.Position().Rotation());
         } else {
             // make sure it is freed
-            if (mMTM.unlock_orientation.IsValid()) {
-                mMTM.unlock_orientation();
+            if (mMTM1.unlock_orientation.IsValid()) {
+                mMTM1.unlock_orientation();
+            }
+        }
+
+        if ((m_align_mtm || m_rotation_locked)
+            && mMTM2.lock_orientation.IsValid()) {
+            // lock in current position
+            mMTM2.lock_orientation(mMTM2.m_measured_cp.Position().Rotation());
+        } else {
+            // make sure it is freed
+            if (mMTM2.unlock_orientation.IsValid()) {
+                mMTM2.unlock_orientation();
             }
         }
 
@@ -768,14 +883,16 @@ void mtsTeleOperationPSM::SetDesiredState(const std::string & state)
 vctMatRot3 mtsTeleOperationPSM::UpdateAlignOffset(void)
 {
     vctMatRot3 desiredOrientation = mPSM.m_setpoint_cp.Position().Rotation();
-    mMTM.m_measured_cp.Position().Rotation().ApplyInverseTo(desiredOrientation, m_alignment_offset);
+    mMTM1.m_measured_cp.Position().Rotation().ApplyInverseTo(desiredOrientation, m_alignment_offset);
     return desiredOrientation;
 }
 
 void mtsTeleOperationPSM::UpdateInitialState(void)
 {
-    mMTM.CartesianInitial.From(mMTM.m_measured_cp.Position());
-    mMTM.m_initial_cp = mMTM.m_measured_cp;
+    mMTM1.CartesianInitial.From(mMTM1.m_measured_cp.Position());
+    mMTM1.m_initial_cp = mMTM1.m_measured_cp;
+    mMTM2.CartesianInitial.From(mMTM2.m_measured_cp.Position());
+    mMTM2.m_initial_cp = mMTM2.m_measured_cp;
     mPSM.CartesianInitial.From(mPSM.m_setpoint_cp.Position());
     mPSM.m_initial_cp = mPSM.m_setpoint_cp;
 
@@ -814,8 +931,13 @@ void mtsTeleOperationPSM::lock_rotation(const bool & lock)
         UpdateInitialState();
         // lock orientation if the arm is running
         if ((mTeleopState.CurrentState() == "ENABLED")
-            && mMTM.lock_orientation.IsValid()) {
-            mMTM.lock_orientation(mMTM.m_measured_cp.Position().Rotation());
+            && mMTM1.lock_orientation.IsValid()) {
+            mMTM1.lock_orientation(mMTM1.m_measured_cp.Position().Rotation());
+        }
+
+        if ((mTeleopState.CurrentState() == "ENABLED")
+            && mMTM2.lock_orientation.IsValid()) {
+            mMTM2.lock_orientation(mMTM2.m_measured_cp.Position().Rotation());
         }
     }
 }
@@ -834,9 +956,18 @@ void mtsTeleOperationPSM::set_align_mtm(const bool & alignMTM)
 {
     mConfigurationStateTable->Start();
     // make sure we have access to lock/unlock
-    if ((mMTM.lock_orientation.IsValid()
-         && mMTM.unlock_orientation.IsValid())) {
+    if ((mMTM1.lock_orientation.IsValid()
+         && mMTM1.unlock_orientation.IsValid())) {
         m_align_mtm = alignMTM;
+    } else {
+        if (alignMTM) {
+            mInterface->SendWarning(this->GetName() + ": unable to force MTM alignment, the device doesn't provide commands to lock/unlock orientation");
+        }
+        m_align_mtm = false;
+    }
+    if ((mMTM2.lock_orientation.IsValid()
+         && mMTM2.unlock_orientation.IsValid())) {
+        m_align_mtm = m_align_mtm && alignMTM;
     } else {
         if (alignMTM) {
             mInterface->SendWarning(this->GetName() + ": unable to force MTM alignment, the device doesn't provide commands to lock/unlock orientation");
@@ -867,7 +998,14 @@ void mtsTeleOperationPSM::RunAllStates(void)
 {
     Result result;
 
-    result = mMTM.getData();
+    result = mMTM1.getData();
+    if (!result.ok) {
+        CMN_LOG_CLASS_RUN_ERROR << "Run: MTM: " << result.message << std::endl;
+        mInterface->SendError(this->GetName() + ": MTM: " + result.message);
+        mTeleopState.SetDesiredState("DISABLED");
+    }
+
+    result = mMTM2.getData();
     if (!result.ok) {
         CMN_LOG_CLASS_RUN_ERROR << "Run: MTM: " << result.message << std::endl;
         mInterface->SendError(this->GetName() + ": MTM: " + result.message);
@@ -911,7 +1049,13 @@ void mtsTeleOperationPSM::RunAllStates(void)
             mTeleopState.SetDesiredState("DISABLED");
             mInterface->SendError(this->GetName() + ": PSM is not in state \"ENABLED\" anymore");
         }
-        mMTM.operating_state(state);
+        mMTM1.operating_state(state);
+        if ((state.State() != prmOperatingState::ENABLED)
+            || !state.IsHomed()) {
+            mTeleopState.SetDesiredState("DISABLED");
+            mInterface->SendError(this->GetName() + ": MTM is not in state \"READY\" anymore");
+        }
+        mMTM2.operating_state(state);
         if ((state.State() != prmOperatingState::ENABLED)
             || !state.IsHomed()) {
             mTeleopState.SetDesiredState("DISABLED");
@@ -942,12 +1086,20 @@ void mtsTeleOperationPSM::EnterSettingArmsState(void)
         mPSM.state_command(std::string("home"));
     }
 
-    mMTM.operating_state(state);
+    mMTM1.operating_state(state);
     if (state.State() != prmOperatingState::ENABLED) {
-        mMTM.state_command(std::string("enable"));
+        mMTM1.state_command(std::string("enable"));
     }
     if (!state.IsHomed()) {
-        mMTM.state_command(std::string("home"));
+        mMTM1.state_command(std::string("home"));
+    }
+
+    mMTM2.operating_state(state);
+    if (state.State() != prmOperatingState::ENABLED) {
+        mMTM2.state_command(std::string("enable"));
+    }
+    if (!state.IsHomed()) {
+        mMTM2.state_command(std::string("home"));
     }
 }
 
@@ -956,7 +1108,8 @@ void mtsTeleOperationPSM::TransitionSettingArmsState(void)
     // check state
     prmOperatingState psmState, mtmState;
     mPSM.operating_state(psmState);
-    mMTM.operating_state(mtmState);
+    mMTM1.operating_state(mtmState);
+    mMTM2.operating_state(mtmState);
     if ((psmState.State() == prmOperatingState::ENABLED) && psmState.IsHomed()
         && (mtmState.State() == prmOperatingState::ENABLED) && mtmState.IsHomed()) {
         mTeleopState.SetCurrentState("ALIGNING_MTM");
@@ -986,8 +1139,11 @@ void mtsTeleOperationPSM::EnterAligningMTM(void)
     // if we don't align MTM, just stay in same position
     if (!m_align_mtm) {
         // convert to prm type
-        mMTM.m_move_cp.Goal().Assign(mMTM.m_setpoint_cp.Position());
-        mMTM.move_cp(mMTM.m_move_cp);
+        mMTM1.m_move_cp.Goal().Assign(mMTM1.m_setpoint_cp.Position());
+        mMTM1.move_cp(mMTM1.m_move_cp);
+
+        mMTM2.m_move_cp.Goal().Assign(mMTM2.m_setpoint_cp.Position());
+        mMTM2.move_cp(mMTM2.m_move_cp);
     }
 
     if (m_back_from_clutch) {
@@ -1020,11 +1176,17 @@ void mtsTeleOperationPSM::RunAligningMTM(void)
         mTimeSinceLastAlign = currentTime;
         // Orientate MTM with PSM
         vctFrm4x4 mtmCartesianGoal;
-        mtmCartesianGoal.Translation().Assign(mMTM.m_setpoint_cp.Position().Translation());
+        mtmCartesianGoal.Translation().Assign(mMTM1.m_setpoint_cp.Position().Translation());
         mtmCartesianGoal.Rotation().FromNormalized(mPSM.m_setpoint_cp.Position().Rotation());
         // convert to prm type
-        mMTM.m_move_cp.Goal().From(mtmCartesianGoal);
-        mMTM.move_cp(mMTM.m_move_cp);
+        mMTM1.m_move_cp.Goal().From(mtmCartesianGoal);
+        mMTM1.move_cp(mMTM1.m_move_cp);
+
+        mtmCartesianGoal.Translation().Assign(mMTM2.m_setpoint_cp.Position().Translation());
+        mtmCartesianGoal.Rotation().FromNormalized(mPSM.m_setpoint_cp.Position().Rotation());
+        // convert to prm type
+        mMTM2.m_move_cp.Goal().From(mtmCartesianGoal);
+        mMTM2.move_cp(mMTM2.m_move_cp);
     }
 }
 
@@ -1048,9 +1210,9 @@ void mtsTeleOperationPSM::TransitionAligningMTM(void)
     if (!m_operator.is_active) {
         // update gripper values
         double gripperRange = 0.0;
-        if (mMTM.gripper_measured_js.IsValid()) {
-            mMTM.gripper_measured_js(mMTM.m_gripper_measured_js);
-            const double gripper = mMTM.m_gripper_measured_js.Position()[0];
+        if (mMTM1.gripper_measured_js.IsValid()) {
+            mMTM1.gripper_measured_js(mMTM1.m_gripper_measured_js);
+            const double gripper = mMTM1.m_gripper_measured_js.Position()[0];
             if (gripper > m_operator.gripper_max) {
                 m_operator.gripper_max = gripper;
             } else if (gripper < m_operator.gripper_min) {
@@ -1061,7 +1223,7 @@ void mtsTeleOperationPSM::TransitionAligningMTM(void)
 
         // checking roll
         const double roll = acos(vctDotProduct(desiredOrientation.Column(1),
-                                               mMTM.m_measured_cp.Position().Rotation().Column(1)));
+                                               mMTM1.m_measured_cp.Position().Rotation().Column(1)));
         if (roll > m_operator.roll_max) {
             m_operator.roll_max = roll;
         } else if (roll < m_operator.roll_min) {
@@ -1125,20 +1287,22 @@ void mtsTeleOperationPSM::EnterEnabled(void)
     }
 
     // set MTM/PSM to Teleop (Cartesian Position Mode)
-    mMTM.use_gravity_compensation(false);
-    // set forces to zero and lock/unlock orientation as needed
-    prmForceCartesianSet wrench;
-    mMTM.body_servo_cf(wrench);
-    // reset user wrench
-    m_following_mtm_body_servo_cf = wrench;
-
     // orientation locked or not
     if (m_rotation_locked
-        && mMTM.lock_orientation.IsValid()) {
-        mMTM.lock_orientation(mMTM.m_measured_cp.Position().Rotation());
+        && mMTM1.lock_orientation.IsValid()) {
+        mMTM1.lock_orientation(mMTM1.m_measured_cp.Position().Rotation());
     } else {
-        if (mMTM.unlock_orientation.IsValid()) {
-            mMTM.unlock_orientation();
+        if (mMTM1.unlock_orientation.IsValid()) {
+            mMTM1.unlock_orientation();
+        }
+    }
+
+    if (m_rotation_locked
+        && mMTM2.lock_orientation.IsValid()) {
+        mMTM2.lock_orientation(mMTM2.m_measured_cp.Position().Rotation());
+    } else {
+        if (mMTM2.unlock_orientation.IsValid()) {
+            mMTM2.unlock_orientation();
         }
     }
 
@@ -1154,28 +1318,30 @@ void mtsTeleOperationPSM::EnterEnabled(void)
 }
 
 void mtsTeleOperationPSM::UnilateralTeleop() {
-    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM, m_alignment_offset_initial, m_scale);
+    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM1, m_scale);
     mPSM.m_servo_cpvf.EffortIsDefined() = false;
     mPSM.servo_cpvf(mPSM.m_servo_cpvf);
 }
 
 void mtsTeleOperationPSM::BilateralTeleop() {
-    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM, m_alignment_offset_initial, m_scale);
-    mMTM.m_servo_cpvf = mMTM.computeGoalFromTarget(&mPSM, m_alignment_offset_initial.Inverse(), 1.0 / m_scale);
+    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM1, &mMTM2, 0.5, m_scale, m_scale);
+    mMTM1.m_servo_cpvf = mMTM1.computeGoalFromTarget(&mPSM, 1.0 / m_scale);
+    mMTM2.m_servo_cpvf = mMTM2.computeGoalFromTarget(&mPSM, 1.0 / m_scale);
     
-    mMTM.servo_cpvf(mMTM.m_servo_cpvf);
+    mMTM1.servo_cpvf(mMTM1.m_servo_cpvf);
+    mMTM2.servo_cpvf(mMTM2.m_servo_cpvf);
     mPSM.servo_cpvf(mPSM.m_servo_cpvf);
 }
 
 void mtsTeleOperationPSM::HighLatencyTeleop() {
-    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM, m_alignment_offset_initial, m_scale);
-    mMTM.m_servo_cpvf = mMTM.computeGoalFromTarget(&mPSM, m_alignment_offset_initial.Inverse(), 1.0 / m_scale);
+    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM1, m_scale);
+    mMTM1.m_servo_cpvf = mMTM1.computeGoalFromTarget(&mPSM, 1.0 / m_scale);
 
     mPSM.m_servo_cpvf.PositionIsDefined() = false;
     mPSM.m_servo_cpvf.VelocityIsDefined() = false;
-    mMTM.m_servo_cpvf.EffortIsDefined() = false;
+    mMTM1.m_servo_cpvf.EffortIsDefined() = false;
 
-    mMTM.servo_cpvf(mMTM.m_servo_cpvf);
+    mMTM1.servo_cpvf(mMTM1.m_servo_cpvf);
     mPSM.servo_cpvf(mPSM.m_servo_cpvf);
 }
 
@@ -1185,7 +1351,11 @@ void mtsTeleOperationPSM::RunEnabled(void)
         return;
     }
 
-    if (!mMTM.m_measured_cp.Valid() || !mMTM.m_setpoint_cp.Valid()) {
+    if (!mMTM1.m_measured_cp.Valid() || !mMTM1.m_setpoint_cp.Valid()) {
+        return;
+    }
+
+    if (!mMTM2.m_measured_cp.Valid() || !mMTM2.m_setpoint_cp.Valid()) {
         return;
     }
 
@@ -1217,26 +1387,16 @@ void mtsTeleOperationPSM::RunEnabled(void)
 
     psm_js_data.emplace_back(psm_jp, psm_jv, psm_jf);
 
-    vct7 mtm_jp;
-    vct7 mtm_jv;
-    vct7 mtm_jf;
-
-    mtm_jp.Assign(mMTM.m_measured_js.Position().Ref(7));
-    mtm_jv.Assign(mMTM.m_measured_js.Velocity().Ref(7));
-    mtm_jf.Assign(mMTM.m_measured_js.Effort().Ref(7));
-
-    mtm_js_data.emplace_back(mtm_jp, mtm_jv, mtm_jf);
-
     if (m_jaw.ignore) {
         return;
     }
 
     // open jaws to 45 degrees if we don't have MTM gripper position
-    if (!mMTM.gripper_measured_js.IsValid()) {
+    if (!mMTM1.gripper_measured_js.IsValid()) {
         mPSM.m_jaw_servo_jp.Goal()[0] = 45.0 * cmnPI_180;
         mPSM.jaw_servo_jp(mPSM.m_jaw_servo_jp);
     } else {
-        const double currentGripper = mMTM.m_gripper_measured_js.Position()[0];
+        const double currentGripper = mMTM1.m_gripper_measured_js.Position()[0];
         // see if we caught up
         if (!m_jaw_caught_up_after_clutch) {
             const double error = std::abs(currentGripper - m_gripper_ghost);
@@ -1311,12 +1471,17 @@ void mtsTeleOperationPSM::TransitionEnabled(void)
         mPSM.m_servo_cpvf.VelocityIsDefined() = false;
         mPSM.m_servo_cpvf.EffortIsDefined() = false;
 
-        mMTM.m_servo_cpvf.PositionIsDefined() = false;
-        mMTM.m_servo_cpvf.VelocityIsDefined() = false;
-        mMTM.m_servo_cpvf.EffortIsDefined() = false;
+        mMTM1.m_servo_cpvf.PositionIsDefined() = false;
+        mMTM1.m_servo_cpvf.VelocityIsDefined() = false;
+        mMTM1.m_servo_cpvf.EffortIsDefined() = false;
+
+        mMTM2.m_servo_cpvf.PositionIsDefined() = false;
+        mMTM2.m_servo_cpvf.VelocityIsDefined() = false;
+        mMTM2.m_servo_cpvf.EffortIsDefined() = false;
 
         mPSM.servo_cpvf(mPSM.m_servo_cpvf);
-        mMTM.servo_cpvf(mMTM.m_servo_cpvf);
+        mMTM1.servo_cpvf(mMTM1.m_servo_cpvf);
+        mMTM2.servo_cpvf(mMTM2.m_servo_cpvf);
 
         save_js_data<6>(js_data_output_folder + "psm_js.csv", psm_js_data);
         save_js_data<7>(js_data_output_folder + "mtm_js.csv", mtm_js_data);

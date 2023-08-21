@@ -128,7 +128,8 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
         virtual ~Arm() {};
 
         virtual void populateInterface(mtsInterfaceRequired* interfaceRequired);
-        virtual prmStateCartesian computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const;
+        virtual prmStateCartesian computeGoalFromTarget(Arm* target, double size_scale) const;
+        virtual prmStateCartesian computeGoalFromTarget(Arm* target_a, Arm* target_b, double alpha, double size_scale_a, double size_scale_b) const;
 
         virtual Result getData();
 
@@ -170,7 +171,8 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     class ArmMTM : public Arm {
     public:
         void populateInterface(mtsInterfaceRequired* interfaceRequired) override;
-        prmStateCartesian computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const override;
+        prmStateCartesian computeGoalFromTarget(Arm* target, double size_scale) const override;
+        prmStateCartesian computeGoalFromTarget(Arm* target_a, Arm* target_b, double alpha, double size_scale_a, double size_scale_b) const override;
 
         Result getData() override;
 
@@ -190,7 +192,8 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     class ArmPSM : public Arm {
     public:
         void populateInterface(mtsInterfaceRequired* interfaceRequired) override;
-        prmStateCartesian computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const override;
+        prmStateCartesian computeGoalFromTarget(Arm* target, double size_scale) const override;
+        prmStateCartesian computeGoalFromTarget(Arm* target_a, Arm* target_b, double alpha, double size_scale_a, double size_scale_b) const override;
 
         Result getData() override;
 
@@ -206,7 +209,8 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     };
 
     Mode mTeleopMode;
-    ArmMTM mMTM;
+    ArmMTM mMTM1;
+    ArmMTM mMTM2;
     ArmPSM mPSM;
 
     void UnilateralTeleop();

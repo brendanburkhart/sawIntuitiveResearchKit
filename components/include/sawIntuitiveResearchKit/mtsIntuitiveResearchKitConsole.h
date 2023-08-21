@@ -210,7 +210,8 @@ class CISST_EXPORT mtsIntuitiveResearchKitConsole: public mtsTaskFromSignal
         friend class dvrk::console;
 
         TeleopPSM(const std::string & name,
-                  const std::string & nameMTM,
+                  const std::string & nameMTM1,
+                  const std::string & nameMTM2,
                   const std::string & namePSM);
 
         /*! Create and configure the robot arm. */
@@ -233,7 +234,8 @@ class CISST_EXPORT mtsIntuitiveResearchKitConsole: public mtsTaskFromSignal
         bool mSelected;
         std::string m_name;
         TeleopPSMType m_type;
-        std::string mMTMName;
+        std::string mMTM1Name;
+        std::string mMTM2Name;
         std::string mPSMName;
         mtsFunctionWrite state_command;
         mtsFunctionWrite set_scale;
