@@ -8,5 +8,3 @@
 # http://www.cisst.org/cisst/license.txt.
 #
 # --- end cisst license ---
-
-add_subdirectory (derivedTeleOperationPSM/components)
