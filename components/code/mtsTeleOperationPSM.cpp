@@ -30,6 +30,20 @@
 
 CMN_IMPLEMENT_SERVICES_DERIVED_ONEARG(mtsTeleOperationPSM, mtsTaskPeriodic, mtsTaskPeriodicConstructorArg);
 
+mtsTeleOperationPSM::ForceSensor::ForceSensor()
+{
+    measured_cf_sub = node_handle.subscribe("force_sensor/measured_cf", 10, &ForceSensor::force_callback, this);
+    measured_cf.SetForce(vct6(0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
+}
+    
+void mtsTeleOperationPSM::ForceSensor::force_callback(const geometry_msgs::WrenchStamped& msg)
+{
+    measured_cf.SetForce(vct6(msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z,
+                                   msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z));
+    measured_cf.SetTimestamp(msg.header.stamp.toSec());
+    measured_cf.Valid() = true;
+}
+
 mtsTeleOperationPSM::mtsTeleOperationPSM(const std::string & componentName, const double periodInSeconds):
     mtsTaskPeriodic(componentName, periodInSeconds),
     mTeleopMode(Mode::UNILATERAL),
@@ -71,6 +85,11 @@ void mtsTeleOperationPSM::Arm::populateInterface(mtsInterfaceRequired* interface
     interfaceRequired->AddFunction("setpoint_js", setpoint_js);
     interfaceRequired->AddFunction("servo_cpvf", servo_cpvf);
     interfaceRequired->AddFunction("use_gravity_compensation", use_gravity_compensation);
+}
+
+void mtsTeleOperationPSM::Arm::setForce(prmForceCartesianGet external_cf)
+{
+    this->m_body_external_cf = external_cf;
 }
 
 prmStateCartesian mtsTeleOperationPSM::Arm::computeGoalFromTarget(Arm* target, const vctMatRot3& alignment_offset, double size_scale) const
@@ -137,8 +156,8 @@ prmStateCartesian mtsTeleOperationPSM::ArmPSM::computeGoalFromTarget(Arm* target
 {
     auto goalState = Arm::computeGoalFromTarget(target, alignment_offset, size_scale);
 
-    vct6 targetForce = target->m_body_external_cf.Force();
-    vct6 localForce = m_body_external_cf.Force();
+    vct6 targetForce = size_scale < 1.0 ? target->m_body_external_cf.Force() : target->m_body_measured_cf.Force();
+    vct6 localForce = size_scale < 1.0 ? m_body_external_cf.Force() : m_body_measured_cf.Force();
 
     vct6 force_sum = (-targetForce) - localForce;
     goalState.Effort().Assign(force_sum);
@@ -205,14 +224,10 @@ mtsTeleOperationPSM::Result mtsTeleOperationPSM::Arm::getData() {
             cf_external_delay_buffer.pop_front();
         }
 
-        double current_time = m_measured_cp.Timestamp();
-
         m_measured_cp = cp_delay_buffer.front();
         m_body_measured_cv = cv_delay_buffer.front();
         m_body_measured_cf = cf_delay_buffer.front();
         m_body_external_cf = cf_external_delay_buffer.front();
-
-        double delayed_time = m_measured_cp.Timestamp();
 
         if (cp_delay_buffer.size() >= sampleDelay) {
             cp_delay_buffer.pop_front();
@@ -482,6 +497,23 @@ void mtsTeleOperationPSM::Configure(const Json::Value & jsonConfig)
                                      << options << std::endl;
             exit(EXIT_FAILURE);
         }
+    }
+
+    jsonValue = jsonConfig["force-sensor"];
+    if (!jsonValue.empty()) {
+        const auto use_sensor = jsonValue.asString();
+        if (use_sensor == "true") {
+            mUseForceSensor = true;
+        } else if (use_sensor == "false") {
+            mUseForceSensor = false;
+        } else {
+            CMN_LOG_CLASS_INIT_ERROR << "Configure: " << this->GetName()
+                                     << " force-sensor \"" << use_sensor << "\" is not valid.  Valid options are: "
+                                     << "true, false" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        mUseForceSensor = false;
     }
 
     // read scale if present
@@ -868,6 +900,7 @@ void mtsTeleOperationPSM::RunAllStates(void)
     Result result;
 
     result = mMTM.getData();
+
     if (!result.ok) {
         CMN_LOG_CLASS_RUN_ERROR << "Run: MTM: " << result.message << std::endl;
         mInterface->SendError(this->GetName() + ": MTM: " + result.message);
@@ -879,6 +912,10 @@ void mtsTeleOperationPSM::RunAllStates(void)
         CMN_LOG_CLASS_RUN_ERROR << "Run: PSM: " << result.message << std::endl;
         mInterface->SendError(this->GetName() + ": PSM: " + result.message);
         mTeleopState.SetDesiredState("DISABLED");
+    }
+
+    if (mUseForceSensor) {
+        mPSM.setForce(force_sensor.measured_cf);
     }
 
     mtsExecutionResult executionResult;

@@ -28,6 +28,15 @@ set (REQUIRED_CISST_LIBRARIES
 
 find_package (cisst 1.1.0 REQUIRED ${REQUIRED_CISST_LIBRARIES})
 
+find_package(catkin REQUIRED COMPONENTS
+  roscpp
+  std_msgs
+  geometry_msgs
+  sensor_msgs
+  cisst_msgs
+  crtk_msgs
+)
+
 set (onnxruntime_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/onnxruntime/include/")
 set (onnxruntime_LIBRARY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/onnxruntime/lib/")
 
@@ -80,6 +89,7 @@ if (cisst_FOUND)
                          ${sawRobotIO1394_INCLUDE_DIR}
                          ${sawControllers_INCLUDE_DIR}
                          ${gattlib_INCLUDE_DIR}
+                         ${catkin_INCLUDE_DIRS}
                          ${onnxruntime_INCLUDE_DIR})
 
     link_directories (${sawTextToSpeech_LIBRARY_DIR}
@@ -197,6 +207,7 @@ if (cisst_FOUND)
                            ${sawRobotIO1394_LIBRARIES}
                            ${sawControllers_LIBRARIES}
                            ${gattlib_LIBRARIES}
+                           ${catkin_LIBRARIES}
                            onnxruntime)
 
     # Install targets for headers and library
