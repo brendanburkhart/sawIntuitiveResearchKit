@@ -1,0 +1,100 @@
+{
+    "pid": [
+	{
+	    "index": 0,
+	    "name": "outer_yaw",
+	    "type": 2,
+	    "p_gain": 200.0,
+	    "d_gain": 12.0,
+	    "i_gain": 0.0,
+		"use_disturbance_observer": true,
+	    "nominal_mass": 0.001,
+	    "disturbance_cutoff": 10.0,
+	    "effort_low_pass_cutoff_frequency": 40,
+	    "f_gain": 1.0
+	}
+	,
+	{
+	    "index": 1,
+	    "name": "outer_pitch",
+	    "type": 2,
+	    "p_gain": 200.0,
+	    "d_gain": 8.0,
+	    "i_gain": 0.0,
+		"use_disturbance_observer": true,
+	    "nominal_mass": 0.001,
+	    "disturbance_cutoff": 10.0,
+	    "effort_low_pass_cutoff_frequency": 40,
+	    "f_gain": 1.0
+	}
+	,
+	{
+	    "index": 2,
+	    "name": "outer_insertion",
+	    "type": 1,
+	    "p_gain": 8000.0,
+	    "d_gain": 300.0,
+	    "i_gain": 0.0,
+		"use_disturbance_observer": true,
+	    "nominal_mass": 0.001,
+	    "disturbance_cutoff": 10.0,
+	    "effort_low_pass_cutoff_frequency": 40,
+	    "f_gain": 1.0
+	}
+	,
+	{
+	    "index": 3,
+	    "name": "outer_roll",
+	    "type": 2,
+	    "p_gain": 2.0,
+	    "d_gain": 0.05,
+	    "i_gain": 0.0,
+		"use_disturbance_observer": true,
+	    "nominal_mass": 0.000005,
+	    "disturbance_cutoff": 3.0,
+	    "effort_low_pass_cutoff_frequency": 0.1,
+	    "f_gain": 0.4
+	}
+	,
+	{
+	    "index": 4,
+	    "name": "outer_wrist_pitch",
+	    "type": 2,
+	    "p_gain": 2.0,
+	    "d_gain": 0.05,
+	    "i_gain": 0.0,
+		"use_disturbance_observer": true,
+	    "nominal_mass": 0.000005,
+	    "disturbance_cutoff": 3.0,
+	    "effort_low_pass_cutoff_frequency": 0.1,
+	    "f_gain": 0.4
+	}
+	,
+	{
+	    "index": 5,
+	    "name": "outer_wrist_yaw",
+	    "type": 2,
+	    "p_gain": 2.0,
+	    "d_gain": 0.05,
+	    "i_gain": 0.0,
+		"use_disturbance_observer": true,
+	    "nominal_mass": 0.000005,
+	    "disturbance_cutoff": 3.0,
+	    "effort_low_pass_cutoff_frequency": 0.1,
+	    "f_gain": 0.4
+	}
+	,
+	{
+	    "index": 6,
+	    "name": "jaw",
+	    "type": 2,
+	    "p_gain": 2.0,
+	    "d_gain": 0.05,
+	    "i_gain": 0.0,
+		"use_disturbance_observer": true,
+		"nominal_mass": 0.000005,
+	    "disturbance_cutoff": 3.0,
+	    "effort_low_pass_cutoff_frequency": 1
+	}
+    ]
+}
