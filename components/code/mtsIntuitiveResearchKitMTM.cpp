@@ -745,11 +745,7 @@ vctDoubleVec mtsIntuitiveResearchKitMTM::estimateExternalForces(const vctDoubleV
 
     if (mForceEstimation.Ready()) {
         vctDoubleVec dynamics(3);
-        vct3 jp_fixed;
-        vct3 jv_fixed;
-        jp_fixed.Assign(jp.Ref(3));
-        jv_fixed.Assign(jv.Ref(3));
-        dynamics.Assign(mForceEstimation.infer_jf(jp_fixed, jv_fixed));
+        dynamics.Assign(mForceEstimation.infer_jf(jp, jv));
         m_kin_error_js.Effort().Ref(3).Assign(dynamics);
         m_kin_error_js.Effort().Ref(4, 3).Zeros();
         output.Ref(3).Subtract(dynamics);

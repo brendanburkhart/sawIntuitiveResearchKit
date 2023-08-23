@@ -11,7 +11,7 @@
 	    "i_limit": 0.0,
 	    "use_disturbance_observer": true,
 	    "nominal_mass": 0.001,
-	    "disturbance_cutoff": 20.0,
+	    "disturbance_cutoff": 10.0,
 	    "effort_low_pass_cutoff_frequency": 30,
 	    "f_gain": 1.0
 	}
@@ -27,7 +27,7 @@
 	    "i_limit": 0.0,
 	    "use_disturbance_observer": true,
 	    "nominal_mass": 0.001,
-	    "disturbance_cutoff": 20.0,
+	    "disturbance_cutoff": 10.0,
 	    "effort_low_pass_cutoff_frequency": 30,
 	    "f_gain": 1.0
 	}
@@ -43,7 +43,7 @@
 	    "i_limit": 0.0,
 	    "use_disturbance_observer": true,
 	    "nominal_mass": 0.001,
-	    "disturbance_cutoff": 20.0,
+	    "disturbance_cutoff": 10.0,
 	    "effort_low_pass_cutoff_frequency": 30,
 	    "f_gain": 1.0
 	}
@@ -52,14 +52,15 @@
 	    "index": 3,
 	    "name": "wrist_platform",
 	    "type": 2,
-	    "p_gain": 2.0,
-	    "d_gain": 0.25,
+	    "p_gain": 0.15,
+	    "d_gain": 0.03,
 	    "i_gain": 0.0,
 	    "i_forget_rate": 0.99,
 	    "i_limit": 0.0,
+	    "p_deadband": 0.025,
 	    "use_disturbance_observer": true,
-	    "nominal_mass": 0.00002,
-	    "disturbance_cutoff": 8.0,
+	    "nominal_mass": 0.000005,
+	    "disturbance_cutoff": 3.0,
 	    "effort_low_pass_cutoff_frequency": 0.01,
 	    "f_gain": 0.4
 	}
@@ -102,15 +103,15 @@
 	    "index": 6,
 	    "name": "wrist_roll",
 	    "type": 2,
-	    "p_gain": 0.15,
-	    "d_gain": 0.02,
+	    "p_gain": 0.01,
+	    "d_gain": 0.002,
 	    "i_gain": 0.0,
 	    "i_forget_rate": 0.99,
 	    "i_limit": 0.0,
-	    "p_deadband": 0.02,
+	    "p_deadband": 0.025,
 	    "use_disturbance_observer": true,
 	    "nominal_mass": 0.000005,
-	    "disturbance_cutoff": 3.0,
+	    "disturbance_cutoff": 1.0,
 	    "effort_low_pass_cutoff_frequency": 0.01,
 	    "f_gain": 0.4
 	}

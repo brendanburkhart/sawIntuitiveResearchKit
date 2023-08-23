@@ -23,6 +23,7 @@ http://www.cisst.org/cisst/license.txt.
 
 #include <cisstVector/vctDynamicMatrixTypes.h>
 #include <cisstVector/vctDynamicVectorTypes.h>
+#include <cisstVector/vctFixedSizeVectorTypes.h>
 
 #include <../onnxruntime/include/onnxruntime_cxx_api.h>
 
@@ -46,7 +47,6 @@ public:
 
 std::ostream& operator<<(std::ostream& s, const shape_t& shape);
 
-template <size_t input, size_t output>
 class mtsNeuralForceEstimation {
 private:
     bool is_loaded;
@@ -75,9 +75,7 @@ public:
 
     bool Ready() const;
     
-    using input_t = vctFixedSizeVector<double, input>;
-    using output_t = vctFixedSizeVector<double, output>;
-    output_t infer_jf(const input_t& jp, const input_t& jv);
+    vct3 infer_jf(const vctDynamicVector<double>& jp, const vctDynamicVector<double>& jv);
 };
 
 #endif
