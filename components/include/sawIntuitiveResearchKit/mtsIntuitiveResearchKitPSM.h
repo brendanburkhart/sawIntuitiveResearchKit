@@ -24,6 +24,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <sawIntuitiveResearchKit/mtsIntuitiveResearchKitArm.h>
 #include <sawIntuitiveResearchKit/mtsToolList.h>
 #include <sawIntuitiveResearchKit/mtsNeuralForceEstimation.h>
+#include <sawIntuitiveResearchKit/mtsContactDetection.h>
 
 // Always include last
 #include <sawIntuitiveResearchKit/sawIntuitiveResearchKitExport.h>
@@ -87,6 +88,8 @@ class CISST_EXPORT mtsIntuitiveResearchKitPSM: public mtsIntuitiveResearchKitArm
 
 
     void Init(void) override;
+
+    void get_robot_data(void) override;
 
     bool is_homed(void) const override;
     void unhome(void) override;
@@ -215,9 +218,12 @@ class CISST_EXPORT mtsIntuitiveResearchKitPSM: public mtsIntuitiveResearchKitArm
     vctDoubleVec m_tool_engage_lower_position,
         m_tool_engage_upper_position;
 
+    bool m_contact;
     mtsNeuralForceEstimation mForceEstimation;
     mtsNeuralForceEstimation mWristForceEstimation;
+    mtsContactDetection mContactDetection;
     vctDoubleVec estimateExternalForces(const vctDoubleVec& totalForces, const vctDoubleVec& jp, const vctDoubleVec& jv) override;
+    bool estimateContact(const vctDoubleVec& jv, const vctDoubleVec& jf);
 };
 
 CMN_DECLARE_SERVICES_INSTANTIATION(mtsIntuitiveResearchKitPSM);

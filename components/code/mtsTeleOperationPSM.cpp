@@ -184,6 +184,7 @@ void mtsTeleOperationPSM::ArmPSM::populateInterface(mtsInterfaceRequired* interf
     interfaceRequired->AddFunction("jaw/measured_js", jaw_measured_js, MTS_OPTIONAL);
     interfaceRequired->AddFunction("jaw/configuration_js", jaw_configuration_js, MTS_OPTIONAL);
     interfaceRequired->AddFunction("jaw/servo_jp", jaw_servo_jp, MTS_OPTIONAL);
+    interfaceRequired->AddFunction("contact", has_contact, MTS_OPTIONAL);
 }
 
 mtsTeleOperationPSM::Result mtsTeleOperationPSM::Arm::getData() {
@@ -265,7 +266,13 @@ mtsTeleOperationPSM::Result mtsTeleOperationPSM::ArmMTM::getData() {
 }
 
 mtsTeleOperationPSM::Result mtsTeleOperationPSM::ArmPSM::getData() {
-    return Arm::getData();
+    Result result = Arm::getData();
+    if (!result.ok) { return result; }
+
+    mtsExecutionResult execution_result = has_contact(m_has_contact);
+    if (!execution_result.IsOK()) { return Result(false, "call to has_contact failed", execution_result); }
+
+    return Result(true, "", execution_result);
 }
 
 void mtsTeleOperationPSM::Init(void)
@@ -488,10 +495,12 @@ void mtsTeleOperationPSM::Configure(const Json::Value & jsonConfig)
             mTeleopMode = Mode::UNILATERAL;
         } else if (teleopMode == "BILATERAL") {
             mTeleopMode = Mode::BILATERAL;
+        } else if (teleopMode == "CONTACT") {
+            mTeleopMode = Mode::CONTACT;
         } else if (teleopMode == "HIGH_LATENCY") {
             mTeleopMode = Mode::HIGH_LATENCY;
         } else {
-            const std::string options = "UNILATERAL, BILATERAL, HIGH_LATENCY";
+            const std::string options = "UNILATERAL, BILATERAL, CONTACT, HIGH_LATENCY";
             CMN_LOG_CLASS_INIT_ERROR << "Configure: " << this->GetName()
                                      << " mode \"" << teleopMode << "\" is not valid.  Valid options are: "
                                      << options << std::endl;
@@ -1204,6 +1213,24 @@ void mtsTeleOperationPSM::BilateralTeleop() {
     mPSM.servo_cpvf(mPSM.m_servo_cpvf);
 }
 
+void mtsTeleOperationPSM::BilateralContact() {
+    mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM, m_alignment_offset_initial, m_scale);
+    mMTM.m_servo_cpvf = mMTM.computeGoalFromTarget(&mPSM, m_alignment_offset_initial.Inverse(), 1.0 / m_scale);
+
+    if (!mPSM.m_has_contact) {
+        mPSM.m_servo_cpvf.EffortIsDefined() = false;
+        mPSM.servo_cpvf(mPSM.m_servo_cpvf);
+
+        mMTM.m_servo_cpvf.PositionIsDefined() = false;
+        mMTM.m_servo_cpvf.VelocityIsDefined() = false;
+        mMTM.m_servo_cpvf.EffortIsDefined() = false;
+        mMTM.servo_cpvf(mMTM.m_servo_cpvf);
+    } else {
+        mMTM.servo_cpvf(mMTM.m_servo_cpvf);
+        mPSM.servo_cpvf(mPSM.m_servo_cpvf);
+    }
+}
+
 void mtsTeleOperationPSM::HighLatencyTeleop() {
     mPSM.m_servo_cpvf = mPSM.computeGoalFromTarget(&mMTM, m_alignment_offset_initial, m_scale);
     mMTM.m_servo_cpvf = mMTM.computeGoalFromTarget(&mPSM, m_alignment_offset_initial.Inverse(), 1.0 / m_scale);
@@ -1237,6 +1264,9 @@ void mtsTeleOperationPSM::RunEnabled(void)
         break;
     case Mode::BILATERAL:
         BilateralTeleop();
+        break;
+    case Mode::CONTACT:
+        BilateralContact();
         break;
     case Mode::UNILATERAL:
     default:

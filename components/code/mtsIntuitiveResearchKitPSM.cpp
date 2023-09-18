@@ -199,6 +199,21 @@ void mtsIntuitiveResearchKitPSM::PostConfigure(const Json::Value & jsonConfig,
 
         mWristForceEstimation.Load(forceEstimationFile);
     }
+
+    const auto jsonContactDetectionFile = jsonConfig["contact-detection-network"];
+    if (!jsonContactDetectionFile.isNull()) {
+        std::string contactDetectionFile = jsonContactDetectionFile.asString();
+        auto fullname = configPath.Find(contactDetectionFile);
+        if (fullname == "") {
+            CMN_LOG_CLASS_INIT_ERROR << "PostConfigure: " << this->GetName()
+                                     << " using file \"" << filename << "\" can't find contact detection network file \""
+                                     << contactDetectionFile << "\" in path: "
+                                     << configPath << std::endl;
+            exit(EXIT_FAILURE);
+        }
+
+        mContactDetection.Load(contactDetectionFile);
+    }
 }
 
 bool mtsIntuitiveResearchKitPSM::ConfigureTool(const std::string & filename)
@@ -665,8 +680,12 @@ void mtsIntuitiveResearchKitPSM::Init(void)
     m_jaw_setpoint_js.SetAutomaticTimestamp(false);
     StateTable.AddData(m_jaw_setpoint_js, "jaw/setpoint_js");
 
+    StateTable.AddData(m_contact, "contact");
+
     // state table for configuration
     mStateTableConfiguration.AddData(m_jaw_configuration_js, "jaw/configuration_js");
+
+    m_arm_interface->AddCommandReadState(this->StateTable, m_contact, "contact");
 
     // jaw interface
     m_arm_interface->AddCommandReadState(this->StateTable, m_jaw_measured_js, "jaw/measured_js");
@@ -1476,6 +1495,16 @@ void mtsIntuitiveResearchKitPSM::EventHandlerAdapter(const prmEventButton & butt
     }
 }
 
+void mtsIntuitiveResearchKitPSM::get_robot_data() {
+    mtsIntuitiveResearchKitArm::get_robot_data();
+    
+    if (is_cartesian_ready()) {
+        m_contact = estimateContact(m_kin_measured_js.Velocity(), m_kin_measured_js.Effort());
+    } else {
+        m_contact = false;
+    }
+}
+
 void mtsIntuitiveResearchKitPSM::set_tool_present_and_configured(const bool & present,
                                                                  const bool & configured)
 {
@@ -1514,7 +1543,7 @@ void mtsIntuitiveResearchKitPSM::set_tool_present_and_configured(const bool & pr
     PID.configure_js(m_pid_configuration_js);
     // refresh data to take coupling into account
     get_robot_data();
-
+    
     // general update
     if (m_tool_present && m_tool_configured) {
         // we will need to engage this tool
@@ -1670,5 +1699,20 @@ vctDoubleVec mtsIntuitiveResearchKitPSM::estimateExternalForces(const vctDoubleV
         output.Ref(3).Subtract(dynamics);
     }
 
+    if (mWristForceEstimation.Ready()) {
+        vctDoubleVec dynamics(3);
+        dynamics.Assign(mWristForceEstimation.infer_jf(jp.Ref(3, 3), jv.Ref(3, 3)));
+        m_kin_error_js.Effort().Ref(3, 3).Assign(dynamics);
+        output.Ref(3, 3).Subtract(dynamics);
+    }
+
     return output;
+}
+
+bool mtsIntuitiveResearchKitPSM::estimateContact(const vctDoubleVec& jv, const vctDoubleVec& jf) {
+    if (mContactDetection.Ready()) {
+        return mContactDetection.infer(jv, jf);
+    }
+
+    return false;
 }

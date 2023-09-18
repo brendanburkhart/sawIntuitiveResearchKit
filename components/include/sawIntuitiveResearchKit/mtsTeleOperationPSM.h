@@ -57,6 +57,7 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     enum class Mode {
         UNILATERAL,
         BILATERAL,
+        CONTACT,
         HIGH_LATENCY
     };
 
@@ -218,11 +219,14 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
         mtsFunctionRead  jaw_setpoint_js;
         mtsFunctionRead  jaw_measured_js;
         mtsFunctionRead  jaw_configuration_js;
+        mtsFunctionRead  has_contact;
+
         mtsFunctionWrite jaw_servo_jp;
 
         prmStateJoint m_jaw_setpoint_js;
         prmConfigurationJoint m_jaw_configuration_js;
         prmPositionJointSet m_jaw_servo_jp;
+        bool m_has_contact;
     };
 
     Mode mTeleopMode;
@@ -234,6 +238,7 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
 
     void UnilateralTeleop();
     void BilateralTeleop();
+    void BilateralContact();
     void HighLatencyTeleop();
 
     struct {

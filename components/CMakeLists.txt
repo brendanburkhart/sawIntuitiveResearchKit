@@ -160,6 +160,7 @@ if (cisst_FOUND)
          ${sawIntuitiveResearchKit_HEADER_DIR}/prmActuatorJointCouplingCheck.h
          ${sawIntuitiveResearchKit_HEADER_DIR}/prmConfigurationJointFromManipulator.h
          ${sawIntuitiveResearchKit_HEADER_DIR}/mtsNeuralForceEstimation.h
+         ${sawIntuitiveResearchKit_HEADER_DIR}/mtsContactDetection.h
         )
 
     set (SOURCE_FILES
@@ -189,6 +190,7 @@ if (cisst_FOUND)
          code/robGravityCompensationMTM.cpp
          code/robGravityCompensationMTM.h
          code/mtsNeuralForceEstimation.cpp
+         code/mtsContactDetection.cpp
          )
 
     add_library (sawIntuitiveResearchKit

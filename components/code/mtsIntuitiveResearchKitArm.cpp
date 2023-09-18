@@ -2398,6 +2398,12 @@ void mtsIntuitiveResearchKitArm::servo_ci(const prmCartesianImpedance & goal)
 
 void mtsIntuitiveResearchKitArm::servo_cpvf(const prmStateCartesian & cs)
 {
+    if (!cs.PositionIsDefined() && !cs.VelocityIsDefined() && !cs.EffortIsDefined()) {
+        m_servo_cf.Force().Zeros();
+        body_servo_cf(m_servo_cf);
+        return;
+    }
+
     if (!ArmIsReady("servo_cpvf", mtsIntuitiveResearchKitArmTypes::CARTESIAN_SPACE)) {
         return;
     }
