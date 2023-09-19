@@ -290,23 +290,6 @@ void mtsIntuitiveResearchKitMTM::ConfigureGC(const std::string & filename)
 robManipulator::Errno mtsIntuitiveResearchKitMTM::InverseKinematics(vctDoubleVec & jointSet,
                                                                     const vctFrm4x4 & cartesianGoal) const
 {
-    if (mKinematicType == MTM_ITERATIVE) {
-        // projection of roll axis on platform tells us how the platform
-        // should move.  the projection angle is +/- q5 based on q4.  we
-        // also scale the increment based on cos(q[4]) so increment is
-        // null if roll axis is perpendicular to platform
-        jointSet[3] = 0.0; //+= jointSet[5] * cos(jointSet[4]);
-
-        // make sure we respect joint limits
-        const double q3Max = Manipulator->links[3].GetKinematics()->PositionMax();
-        const double q3Min = Manipulator->links[3].GetKinematics()->PositionMin();
-        if (jointSet[3] > q3Max) {
-            jointSet[3] = q3Max;
-        } else if (jointSet[3] < q3Min) {
-            jointSet[3] = q3Min;
-        }
-    }
-
     if (Manipulator->InverseKinematics(jointSet, cartesianGoal) == robManipulator::ESUCCESS) {
         // find closest solution mod 2 pi
         const double difference = m_kin_measured_js.Position()[JNT_WRIST_ROLL] - jointSet[JNT_WRIST_ROLL];
@@ -752,4 +735,31 @@ vctDoubleVec mtsIntuitiveResearchKitMTM::estimateExternalForces(const vctDoubleV
     }
 
     return output;
+}
+
+vctDoubleVec mtsIntuitiveResearchKitMTM::cartesianToJointVelocities(vctDouble6& cartesianVelocity)
+{
+    auto transform = m_measured_cp.Position().Rotation();
+
+    vctDouble6 velocity;
+    velocity.Ref<3>(0) = transform.ApplyInverseTo(cartesianVelocity.Ref<3>(0));
+    velocity.Ref<3>(3) = transform.ApplyInverseTo(cartesianVelocity.Ref<3>(3));
+
+    vctDoubleVec jv(number_of_joints_kinematics());
+
+    vctDoubleMat jacobian_copy(m_body_jacobian.rows(), m_body_jacobian.cols());
+    jacobian_copy.Assign(m_body_jacobian);
+    jacobian_copy.Column(3).Zeros();
+
+    // update the spatial jacobian pseudo inverse
+    nmrPInverseDynamicData jacobian_pinverse_data;
+    jacobian_pinverse_data.Allocate(jacobian_copy);
+    nmrPInverse(jacobian_copy, jacobian_pinverse_data);
+
+    // compute joint velocities
+    vctDoubleVec v(6);
+    v.Assign(velocity);
+    jv.ProductOf(jacobian_pinverse_data.PInverse(), v);
+
+    return jv;
 }
