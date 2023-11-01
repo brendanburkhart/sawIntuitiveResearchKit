@@ -2016,7 +2016,8 @@ void mtsIntuitiveResearchKitArm::servo_jp_internal(const vctDoubleVec & jp,
     // position, velocity, effort
     m_servo_jp_param.Goal().Assign(jp);
     m_servo_jp_param.Velocity().ForceAssign(jv);
-    m_servo_jp_param.SetTimestamp(StateTable.GetTic());
+    //m_servo_jp_param.SetTimestamp(StateTable.GetTic());
+    m_servo_jp_param.Timestamp() = m_servo_cpvf.Timestamp();
 
     if (m_has_coupling) {
         m_servo_jp_param.Goal() = m_coupling.JointToActuatorPosition() * m_servo_jp_param.Goal();

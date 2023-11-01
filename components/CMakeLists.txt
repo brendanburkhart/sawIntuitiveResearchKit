@@ -203,6 +203,9 @@ if (cisst_FOUND)
                            FOLDER "sawIntuitiveResearchKit")
     add_dependencies (sawIntuitiveResearchKit gattlibExternal)
 
+    add_executable(neural_validation ${HEADER_FILES} code/mtsNeuralForceEstimation.cpp code/neural_validation.cpp)
+    cisst_target_link_libraries (neural_validation ${REQUIRED_CISST_LIBRARIES})
+
     # link against non cisst libraries and cisst components
     target_link_libraries (sawIntuitiveResearchKit
                            ${sawTextToSpeech_LIBRARIES}
@@ -211,6 +214,20 @@ if (cisst_FOUND)
                            ${gattlib_LIBRARIES}
                            ${catkin_LIBRARIES}
                            onnxruntime)
+
+    target_link_libraries (neural_validation
+                           ${sawTextToSpeech_LIBRARIES}
+                           ${sawRobotIO1394_LIBRARIES}
+                           ${sawControllers_LIBRARIES}
+                           ${gattlib_LIBRARIES}
+                           ${catkin_LIBRARIES}
+                           onnxruntime)
+
+    install (TARGETS neural_validation
+               COMPONENT sawIntuitiveResearchKit
+               RUNTIME DESTINATION bin
+               LIBRARY DESTINATION lib
+               ARCHIVE DESTINATION lib)
 
     # Install targets for headers and library
     install (DIRECTORY

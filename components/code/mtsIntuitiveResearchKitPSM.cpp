@@ -178,6 +178,7 @@ void mtsIntuitiveResearchKitPSM::PostConfigure(const Json::Value & jsonConfig,
             exit(EXIT_FAILURE);
         }
 
+        std::cout << "Positioning network ";
         bool ok = mForceEstimation.Load(forceEstimationFile);
         if (!ok) {
             CMN_LOG_CLASS_INIT_ERROR << "Failed to load force estimation network" << std::endl;
@@ -197,7 +198,9 @@ void mtsIntuitiveResearchKitPSM::PostConfigure(const Json::Value & jsonConfig,
             exit(EXIT_FAILURE);
         }
 
-        mWristForceEstimation.Load(forceEstimationFile);
+        std::cout << "Wrist network ";
+        bool ok = mWristForceEstimation.Load(forceEstimationFile);
+        std::cout << "Wrist network ok: " << ok << std::endl;
     }
 
     const auto jsonContactDetectionFile = jsonConfig["contact-detection-network"];
@@ -212,6 +215,7 @@ void mtsIntuitiveResearchKitPSM::PostConfigure(const Json::Value & jsonConfig,
             exit(EXIT_FAILURE);
         }
 
+        std::cout << "Contact detection network ";
         mContactDetection.Load(contactDetectionFile);
     }
 }
@@ -1365,7 +1369,7 @@ void mtsIntuitiveResearchKitPSM::servo_jp_internal(const vctDoubleVec & jp,
     }
     // add jaws - current code has velocity goal set to 0
     m_servo_jp_param.Goal().at(6) = m_jaw_servo_jp;
-    m_servo_jp_param.SetTimestamp(StateTable.GetTic());
+    m_servo_jp_param.Timestamp() = m_servo_cpvf.Timestamp();
 
     if (m_has_coupling) {
         m_servo_jp_param.Goal() = m_coupling.JointToActuatorPosition() * m_servo_jp_param.Goal();

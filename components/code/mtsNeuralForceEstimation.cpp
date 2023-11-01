@@ -90,33 +90,23 @@ Ort::Value zero_tensor(const shape_t& shape)
 
 bool mtsNeuralForceEstimation::Validate()
 {
-    // if (input_shapes.size() == 0 || input_shapes.size() != output_shapes.size()) {
-    //     std::cout << "Expected network to have at least one input/output, and to have equal number of inputs and outputs."
-    //               << " Instead, network has " << input_shapes.size() << " input(s) and " << output_shapes.size() << " output(s).\n";
-    //     return false;
-    // }
+    if (input_shapes.size() == 0 || input_shapes.size() != output_shapes.size()) {
+        std::cout << "Expected network to have at least one input/output, and to have equal number of inputs and outputs."
+                  << " Instead, network has " << input_shapes.size() << " input(s) and " << output_shapes.size() << " output(s).\n";
+        return false;
+    }
 
-    // if (input_shapes[0].ndim() != 3 || input_shapes[0].size() != 2 * input) {
-    //     std::cout << "Network input shape mismatch: found " << input_shapes[0]
-    //               << ", but should have 3 dimensions and total size of " << 2 * input << std::endl;
-    //     return false;
-    // }
+    std::cout << "shape: " << input_shapes[0] << ", " << output_shapes[0] << std::endl;
 
-    // if (output_shapes[0].ndim() > 3 || output_shapes[0].size() != output) {
-    //     std::cout << "Network output shape mismatch: found " << output_shapes[0]
-    //               << ", but should have at most 3 dimensions and total size of " << output << std::endl;
-    //     return false;
-    // }
+    for (size_t i = 1; i < input_shapes.size(); i++) {
+        if (input_shapes[i] != output_shapes[i]) {
+            std::cout << "Network input/output pairs for hidden state must have the same shape,"
+                      << " but input/output pair " << i << " are " << input_shapes[i]
+                      << " and " << output_shapes[i] << " respectively.\n";
 
-    // for (size_t i = 1; i < input_shapes.size(); i++) {
-    //     if (input_shapes[i] != output_shapes[i]) {
-    //         std::cout << "Network input/output pairs for hidden state must have the same shape,"
-    //                   << " but input/output pair " << i << " are " << input_shapes[i]
-    //                   << " and " << output_shapes[i] << " respectively.\n";
-
-    //         return false;
-    //     }
-    // }
+            return false;
+        }
+    }
 
     return true;
 }

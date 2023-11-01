@@ -72,6 +72,8 @@ if (cisst_FOUND_AS_REQUIRED)
                       ${sawIntuitiveResearchKit_LIBRARY_DIR}
                       ${sawControllers_LIBRARY_DIR}
                       ${sawTextToSpeech_LIBRARY_DIR})
+    
+      
 
     # examples using Qt
     if (CISST_HAS_QT)
@@ -117,6 +119,12 @@ if (cisst_FOUND_AS_REQUIRED)
                  RUNTIME DESTINATION bin
                  LIBRARY DESTINATION lib
                  ARCHIVE DESTINATION lib)
+              
+        add_executable (force_reproc force_reprocessing.cpp)
+        target_link_libraries (force_reproc
+                                ${sawIntuitiveResearchKit_LIBRARIES})
+        # link against cisst libraries (and dependencies)
+        cisst_target_link_libraries (force_reproc ${REQUIRED_CISST_LIBRARIES})
 
       endif (CISST_HAS_JSON)
 

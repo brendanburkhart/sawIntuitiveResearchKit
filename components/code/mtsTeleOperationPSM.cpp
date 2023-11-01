@@ -135,6 +135,8 @@ prmStateCartesian mtsTeleOperationPSM::Arm::computeGoalFromTarget(Arm* target, c
     goalState.Effort().Assign(sum);
     goalState.EffortIsDefined() = true;
 
+    goalState.Timestamp() = target->m_measured_cp.Timestamp();
+
     return goalState;
 }
 
