@@ -24,13 +24,6 @@
 #include <string>
 #include <deque>
 
-#include <ros/ros.h>
-#include <std_msgs/Empty.h>
-#include <sensor_msgs/JointState.h>
-#include <geometry_msgs/PoseStamped.h>
-#include <geometry_msgs/TwistStamped.h>
-#include <geometry_msgs/WrenchStamped.h>
-
 #include <cisstMultiTask/mtsTaskPeriodic.h>
 #include <cisstParameterTypes/prmEventButton.h>
 #include <cisstParameterTypes/prmPositionCartesianGet.h>
@@ -130,17 +123,6 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
         Result(bool ok, std::string message, mtsExecutionResult executionResult);
     };
 
-    class ForceSensor  {
-    public:
-        ForceSensor();
-        ros::NodeHandle node_handle;
-        ros::Subscriber measured_cf_sub;
-
-        prmForceCartesianGet measured_cf;
-
-        void force_callback(const geometry_msgs::WrenchStamped& msg);
-    };
-
     // Light wrapper around common arm functionality
     class Arm {
     public:
@@ -232,9 +214,6 @@ class CISST_EXPORT mtsTeleOperationPSM: public mtsTaskPeriodic
     Mode mTeleopMode;
     ArmMTM mMTM;
     ArmPSM mPSM;
-
-    bool mUseForceSensor;
-    ForceSensor force_sensor;
 
     void UnilateralTeleop();
     void BilateralTeleop();
