@@ -28,22 +28,17 @@ class DataCollection:
         self.output_file = output_file
 
     def home(self):
-        print('starting enable')
-        if not self.arm.enable(10):
-            sys.exit('failed to enable within 10 seconds')
-        print('starting home')
-        if not self.arm.home(10):
-            sys.exit('failed to home within 10 seconds')
+        print("Homing arm")
+        if not self.arm.enable(10) or not self.arm.home(10):
+            sys.exit("    ! failed to enable home arm within timeout")
 
     # make sure insertion is past cannula to enable Cartesian commands
     def prepare_cartesian(self):
         name = self.arm.name()
         if (name.endswith('PSM1') or name.endswith('PSM2')
             or name.endswith('PSM3') or name.endswith('ECM')):
-            goal = numpy.copy(self.arm.setpoint_jp())
+            goal = numpy.copy(self.arm.setpoint_jp()[0])
 
-            print('preparing for cartesian motion')
-            # set in position joint mode
             goal[0] = 0.0
             goal[1] = 0.0
             goal[2] = 0.12
@@ -51,32 +46,39 @@ class DataCollection:
             self.arm.move_jp(goal).wait()
 
     def collect(self):
-        yaw_angles = [ -0.3 * math.pi, -0.1 * math.pi, 0.0, 0.2 * math.pi, 0.4 * math.pi, 0.5 * math.pi ]
+        yaw_angles = [ -0.45 * math.pi, -0.3 * math.pi, -0.1 * math.pi, 0.0, 0.2 * math.pi, 0.4 * math.pi, 0.5 * math.pi ]
         pitch_angles = [ -0.35 * math.pi, -0.2 * math.pi, -0.1 * math.pi, 0.05 * math.pi, 0.15 * math.pi, 0.25 * math.pi ]
         insertions = [ 0.120, 0.160, 0.200 ]
 
-        goal = numpy.copy(self.arm.setpoint_jp())
+        goal = numpy.copy(self.arm.setpoint_jp()[0])
         goal.fill(0.0)
 
         samples = []
+        total_samples = len(yaw_angles) * len(pitch_angles) * len(insertions)
 
         for i, yaw in enumerate(yaw_angles):
             pitches = pitch_angles if i % 2 == 0 else reversed(pitch_angles)
-            for j, pitch in pitches:
+            for j, pitch in enumerate(pitches):
                 inserts = insertions if j % 2 == 0 else reversed(insertions)
                 for insertion in inserts:
                     goal[0:3] = [yaw, pitch, insertion]
                     self.arm.move_jp(goal).wait()
-                    time.sleep(0.5)
+                    time.sleep(1.0)
                     poses = []
                     efforts = []
-                    for _ in range(5):
+                    for _ in range(10):
                         p, v, e, t = self.arm.measured_js()
                         poses.append(p[0:3])
                         efforts.append(e[0:3])
                         time.sleep(0.1)
-                    
-                    samples.append((numpy.mean(poses, axis=0), numpy.mean(efforts, axis=0)))
+
+                    pose = numpy.mean(poses, axis=0)
+                    efforts = numpy.mean(efforts, axis=0)
+                    samples.append((pose, efforts))
+                    print(f"\r{int(100 * len(samples)/total_samples)}% done", end='', flush=True)
+
+        print()
+        self.prepare_cartesian()
 
         return samples
 

@@ -15,7 +15,7 @@
 
 import argparse
 import numpy as np
-import scipy as sp
+import scipy.optimize as opt
 
 def solve(A, b, lambda1 = 0.01, lambda2 = 0.1):
     n = A.shape[1]
@@ -45,7 +45,7 @@ def solve(A, b, lambda1 = 0.01, lambda2 = 0.1):
 
     bounds = [(lower, upper) for lower, upper in zip(lb, ub)]
 
-    result = sp.optimize.minimize(objective, x0, method='L-BFGS-B', jac=gradient, bounds=bounds)
+    result = opt.minimize(objective, x0, method='L-BFGS-B', jac=gradient, bounds=bounds)
     if not result.success:
         print("!!! Failed to solve !!!")
         print("Details: ")
