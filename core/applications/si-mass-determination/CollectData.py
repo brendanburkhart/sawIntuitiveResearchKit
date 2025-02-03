@@ -32,60 +32,93 @@ class DataCollection:
         if not self.arm.enable(10) or not self.arm.home(10):
             sys.exit("    ! failed to enable home arm within timeout")
 
-    # make sure insertion is past cannula to enable Cartesian commands
-    def prepare_cartesian(self):
-        name = self.arm.name()
-        if (name.endswith('PSM1') or name.endswith('PSM2')
-            or name.endswith('PSM3') or name.endswith('ECM')):
-            goal = numpy.copy(self.arm.setpoint_jp()[0])
+        self.goal = numpy.zeros_like(self.arm.setpoint_jp()[0])
 
-            goal[0] = 0.0
-            goal[1] = 0.0
-            goal[2] = 0.12
-            goal[3] = 0.0
-            self.arm.move_jp(goal).wait()
+    def _init_progress_indicator(self, total_samples):
+        self.start_time = time.time()
+        self.total_samples = total_samples
+        self.samples = 0
+        self.last_indicator_length = 0
+
+    def _update_progress_indicator(self, samples_collected):
+        progress = int(100 * samples_collected/self.total_samples)
+        elapsed_s = max(1.0, time.time() - self.start_time)
+        speed = samples_collected / elapsed_s
+        remaining_s = int((self.total_samples - samples_collected) / speed)
+        remaining_time = f"{remaining_s} seconds" if remaining_s < 120 else f"{int(remaining_s/60)} minutes"
+
+        if samples_collected == self.total_samples:
+            message = "100% done!"
+            end = '\n'
+        else:
+            message = f"{progress}% done, estimated time remaining: {remaining_time}"
+            end = ''
+
+        stick_out = max(0, self.last_indicator_length - len(message))
+        self.last_indicator_length = len(message)
+        padding = " " * stick_out
+
+        print(f"\r{message}{padding}", end=end, flush=True)
+
+    """Given three equal-length list A, B, and C this creates an iterator returning all possible
+       element combinations (a,b,c), with only one index of the tuple changing at a time"""
+    def _zig_zag(self, a_list, b_list, c_list):
+        for i, a in enumerate(a_list):
+            for j, b in enumerate(b_list):
+                for k, c in enumerate(c_list):
+                    yield (a, b, c)
+                c_list = list(reversed(c_list))
+            b_list = list(reversed(b_list))
+
+    def _sample(self, yaw, pitch, insertion, reps):
+        self.goal[0:3] = [yaw, pitch, insertion]
+        self.arm.move_jp(self.goal).wait()
+        time.sleep(0.50)
+        poses = []
+        efforts = []
+        for _ in range(reps):
+            p, v, e, t = self.arm.measured_js()
+            poses.append(p[0:3])
+            efforts.append(e[0:3])
+            time.sleep(0.05)
+
+        pose = numpy.mean(poses, axis=0)
+        efforts = numpy.mean(efforts, axis=0)
+        return pose, efforts
 
     def collect(self):
-        yaw_angles = [ -0.45 * math.pi, -0.3 * math.pi, -0.1 * math.pi, 0.0, 0.2 * math.pi, 0.4 * math.pi, 0.5 * math.pi ]
-        pitch_angles = [ -0.35 * math.pi, -0.2 * math.pi, -0.1 * math.pi, 0.05 * math.pi, 0.15 * math.pi, 0.25 * math.pi ]
-        insertions = [ 0.120, 0.160, 0.200 ]
+        short_yaw_angles = [ a * math.pi for a in [ -0.45, -0.3, 0.0, 0.2, 0.5 ]]
+        yaw_angles = [ a * math.pi for a in [ -0.7, -0.5, -0.3, -0.1, 0.15, 0.35, 0.45, 0.65 ]]
+        pitch_angles = [a * math.pi for a in [ -0.35, -0.25, -0.125, 0.0, 0.125, 0.25, 0.35 ]]
+        # pitch_angles = [a * math.pi for a in [ -0.2, -0.1, 0.0, 0.1, 0.2 ]]
+        insertions = [ 0.050, 0.200 ]
 
-        goal = numpy.copy(self.arm.setpoint_jp()[0])
-        goal.fill(0.0)
+        # hack to avoid tracking error when moving to initial position
+        # possibly due to disabling disturbance observers? but doesn't seem to happen later
+        self.goal[0:3] = [-0.45 * math.pi, -0.35 * math.pi, 0.1]
+        self.arm.move_jp(self.goal).wait()
 
         samples = []
-        total_samples = len(yaw_angles) * len(pitch_angles) * len(insertions)
+        total_samples = (len(yaw_angles) + len(short_yaw_angles)) * len(pitch_angles) * len(insertions)
+        self._init_progress_indicator(total_samples)
 
-        for i, yaw in enumerate(yaw_angles):
-            pitches = pitch_angles if i % 2 == 0 else reversed(pitch_angles)
-            for j, pitch in enumerate(pitches):
-                inserts = insertions if j % 2 == 0 else reversed(insertions)
-                for insertion in inserts:
-                    goal[0:3] = [yaw, pitch, insertion]
-                    self.arm.move_jp(goal).wait()
-                    time.sleep(1.0)
-                    poses = []
-                    efforts = []
-                    for _ in range(10):
-                        p, v, e, t = self.arm.measured_js()
-                        poses.append(p[0:3])
-                        efforts.append(e[0:3])
-                        time.sleep(0.1)
+        # zig-zag along yaw first
+        for yaw, pitch, insertion in self._zig_zag(short_yaw_angles, pitch_angles, insertions):
+            pose, efforts = self._sample(yaw, pitch, insertion, 10)
+            samples.append((pose, efforts))
+            self._update_progress_indicator(len(samples))
 
-                    pose = numpy.mean(poses, axis=0)
-                    efforts = numpy.mean(efforts, axis=0)
-                    samples.append((pose, efforts))
-                    print(f"\r{int(100 * len(samples)/total_samples)}% done", end='', flush=True)
-
-        print()
-        self.prepare_cartesian()
+        # then along pitch first
+        for pitch, yaw, insertion in self._zig_zag(pitch_angles, yaw_angles, insertions):
+            pose, efforts = self._sample(yaw, pitch, insertion, 10)
+            samples.append((pose, efforts))
+            self._update_progress_indicator(len(samples))
 
         return samples
 
     def run(self):
         self.ral.check_connections()
         self.home()
-        self.prepare_cartesian()
         samples = self.collect()
         print(f"Collected {len(samples)} samples")
 
