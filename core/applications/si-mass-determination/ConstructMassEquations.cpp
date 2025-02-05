@@ -37,7 +37,7 @@ void clear_mass_data(robManipulator& m) {
     auto eye = vctFixedSizeMatrix<double,3,3>::Eye();
 
     for (auto& link : m.links) {
-        link.MassData() = robMass(0.0, vct3(0.0), 0.0001 * eye, eye);
+        link.MassData() = robMass(0.0, vct3(0.0), 0.0 * eye, eye);
     }
 }
 
@@ -46,7 +46,7 @@ void set_mass_k(robManipulator& m, size_t k, double mass) {
     clear_mass_data(m);
 
     auto eye = vctFixedSizeMatrix<double,3,3>::Eye();
-    m.links.at(k).MassData() = robMass(mass, vct3(0.0, 0.0, 0.0), 0.0001 * eye, eye);
+    m.links.at(k).MassData() = robMass(mass, vct3(0.0, 0.0, 0.0), 0.0 * eye, eye);
 }
 
 // Set mass k to <mass> and the kth center of mass to unit vector along <axis>
@@ -57,7 +57,7 @@ void set_com_k(robManipulator& m, size_t k, size_t axis, double mass) {
     vct3 com(0.0, 0.0, 0.0);
     com[axis] = mass;
 
-    m.links.at(k).MassData() = robMass(mass, com, 0.0001 * eye, eye);
+    m.links.at(k).MassData() = robMass(mass, com, 0.0 * eye, eye);
 }
 
 Equations construct_equations(std::vector<Sample> samples, robManipulator& m, double mounting_angle) {
