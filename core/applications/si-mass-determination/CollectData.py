@@ -88,14 +88,14 @@ class DataCollection:
 
     def collect(self):
         short_yaw_angles = [ a * math.pi for a in [ -0.45, -0.3, 0.0, 0.2, 0.5 ]]
-        yaw_angles = [ a * math.pi for a in [ -0.7, -0.5, -0.3, -0.1, 0.15, 0.35, 0.45, 0.65 ]]
-        pitch_angles = [a * math.pi for a in [ -0.35, -0.25, -0.125, 0.0, 0.125, 0.25, 0.35 ]]
+        yaw_angles = [ a * math.pi for a in [ -0.5, -0.3, -0.1, 0.15, 0.35, 0.45 ]]
+        pitch_angles = [a * math.pi for a in [ -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3 ]]
         # pitch_angles = [a * math.pi for a in [ -0.2, -0.1, 0.0, 0.1, 0.2 ]]
-        insertions = [ 0.050, 0.200 ]
+        insertions = [ 0.050, 0.125, 0.200 ]
 
         # hack to avoid tracking error when moving to initial position
         # possibly due to disabling disturbance observers? but doesn't seem to happen later
-        self.goal[0:3] = [-0.45 * math.pi, -0.35 * math.pi, 0.1]
+        self.goal[0:3] = [-0.3 * math.pi, -0.3 * math.pi, 0.1]
         self.arm.move_jp(self.goal).wait()
 
         samples = []
@@ -137,7 +137,7 @@ if __name__ == '__main__':
     # parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--arm', type=str, required=True,
-                        choices=['PSM1', 'PSM2', 'PSM3'],
+                        choices=['PSM1', 'PSM2', 'PSM3', 'ECM'],
                         help = 'arm name corresponding to ROS topics without namespace. Use __ns:= to specify the namespace')
     parser.add_argument('-o', '--output', type=str, required=True,
                         help = 'output file name')

@@ -48,18 +48,23 @@ public:
     vctVec b;
 };
 
+enum class ArmType {
+    PSM, ECM
+};
+
 // Convert reduced joint positions used by virtual PSM Si DH params to equivalent
 // joint positions for the physical DH parameters
-joint_pose reduced_to_full(double yaw, double pitch, double insertion) {
-    joint_pose joint_positions(7, 0.0);
+joint_pose reduced_to_full(double yaw, double pitch, double insertion, ArmType type) {
+    size_t n_joints = (type == ArmType::ECM) ? 6 : 7;
+
+    joint_pose joint_positions(n_joints, 0.0);
 
     joint_positions[0] = yaw;             
     joint_positions[1] = 0.0;             // passive/virtual joint
     joint_positions[2] = pitch;           // parallelogram joint 1
     joint_positions[3] = -pitch;          // parallelogram joint 2
     joint_positions[4] = pitch;           // parallelogram joint 3
-    joint_positions[5] = 0.5 * insertion; // insertion stage 1
-    joint_positions[6] = 0.5 * insertion; // insertion stage 2 
+    joint_positions[5] = insertion;
 
     return joint_positions;
 }
@@ -72,8 +77,7 @@ joint_efforts measured_efforts(const joint_efforts& all_efforts)
     // joint 1 is passive
     // physical joints 2-4 are all connected to one motor, joint 3 is oriented opposite
     double pitch_effort = all_efforts[2] - all_efforts[3] + all_efforts[4];
-    // joints 5, 6 are cascaded together so we only use joint 6
-    double insertion_effort = all_efforts[6];
+    double insertion_effort = all_efforts[5];
 
     return vctDoubleVec(3, yaw_effort, pitch_effort, insertion_effort);
 }

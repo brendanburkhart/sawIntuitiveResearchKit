@@ -14,71 +14,131 @@
 # --- end cisst license ---
 
 import argparse
+import enum
 import numpy as np
 import scipy.optimize as opt
+import sys
 
-def solve(A, b, lambda1 = 0.001, lambda2 = 0.01):
-    removed_links = 1
-    indices = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 20, 21, 22, 23])
+class ArmType(enum.Enum):
+    PSM = 0
+    ECM = 1
 
-    A = A[:, indices]
-    b = b[:]
-
+def solve(A, b, arm_type, lambda1 = 0.01, lambda2 = 0.1):
     n = A.shape[1]
+    links = n // 4 # four variables per link (mass, cx, cy, cz)
+    mass_indices = np.array([i for i in range(n) if i % 4 == 0])
+
+    def bounds(n):
+        lower = np.full((n,), -np.inf)
+        upper = np.full((n,), +np.inf)
+
+        lower[mass_indices] = 0.0 # link masses must be non-negative
+
+        def set_com_bounds(k, x, y, z):
+            lower[4 * k + 1] = x[0]
+            upper[4 * k + 1] = x[1]
+
+            lower[4 * k + 2] = y[0]
+            upper[4 * k + 2] = y[1]
+
+            lower[4 * k + 3] = z[0]
+            upper[4 * k + 3] = z[1]
+
+        set_com_bounds(0, (-0.12,  0.02), ( 0.00,  0.12), ( 0.00,  0.00))
+        set_com_bounds(1, ( 0.00,  0.20), (-0.10,  0.10), ( 0.00,  0.00))
+        set_com_bounds(2, ( 0.00,  0.35), (-0.15,  0.00), ( 0.00,  0.00))
+        set_com_bounds(3, ( 0.00,  0.03), (-0.10,  0.40), ( 0.00,  0.00))
+
+        if arm_type == ArmType.PSM:
+            # completely ignore first insertion stage
+            lower[4 * 4 + 0], uppper[4 * 4 + 0] = 0.0, 0.0
+            set_com_bounds(4, (0.0, 0.0), (0.0, 0.0), (0.0, 0.0))
+
+            set_com_bounds(5, ( 0.00,  0.02), ( 0.00,  0.00), (-0.10,  0.10))
+        elif arm_type == ArmType.ECM:
+            set_com_bounds(4, (-0.06,  0.00), ( 0.00,  0.00), (-0.20,  0.00))
+
+        return lower, upper
+
+    def yvec(x):
+        y = np.zeros_like(x)
+        for i in range(links):
+            m = x[4 * i + 0]
+            y[4 * i + 0] = 1 * x[4 * i + 0]
+            y[4 * i + 1] = m * x[4 * i + 1]
+            y[4 * i + 2] = m * x[4 * i + 2]
+            y[4 * i + 3] = m * x[4 * i + 3]
+
+        return y
+
+    def Hmat(x):
+        H = np.zeros((full_n, full_n))
+        for i in range(n):
+            j = i % 4
+            if j == 0:
+                H[i:i+4, i] = np.array([1.0, x[i+1], x[i+2], x[i+3]])
+            else:
+                m = x[i - j]
+                H[i, i] = m
+
+        return H
 
     def objective(x):
-        lstsq = 0.5 * np.linalg.norm(A @ x - b, 2)**2
-        l2 = 0.5 * np.linalg.norm(x, 2)**2
-        l1 = np.linalg.norm(x, 1)
-        return lstsq + lambda1 * l2 + lambda2 * l1
+        y = yvec(x)
+        lstsq = 0.5 * np.linalg.norm(A @ y - b, 2)**2
+        l1_norm = np.linalg.norm(x, 1)
+        l2_norm = 0.5 * np.linalg.norm(x, 2)**2
+
+        return lstsq + lambda1 * l1_norm + lambda2 * l2_norm
 
     def gradient(x):
-        return A.T @ (A @ x - b)  + lambda1 * x + lambda2 * np.sign(x)
+        y, H = yvec(x), Hmat(x)
+        g = H.T @ A.T @ (A @ y - b)
+
+        return g + lambda1 * np.sign(x) + lambda2 * x
 
     def hessian(x):
-        return A.T @ A + lambda1 * np.eye(n)
+        H = Hmat(x)
+        D = A @ H
 
-    # Use simple L2-regularized solutions as initial guess
-    x0 = np.linalg.lstsq(A.T @ A + 0.01 * np.eye(n), A.T @ b, rcond=None)[0]
-    x0[x0 < 0] = 0.0 # Make sure initial guess is feasible
+        return D.T @ D + lambda2 * np.eye(n)
 
-    lb, ub = np.zeros((n,)), np.zeros((n,))
-    lb.fill(-np.inf)
-    ub.fill(np.inf)
+    lower, upper = bounds(n)
 
-    for k in range(6-removed_links):
-        lb[4 * k] = 0.0
+    x0 = np.zeros((n,))
+    x0[mass_indices] = 1.0
 
-    bounds = [(lower, upper) for lower, upper in zip(lb, ub)]
+    # clamp initial guess within bounds so it is feasible
+    for i, v in enumerate(x0):
+        x0[i] = max(lower[i], min(upper[i], v))
 
-    result = opt.minimize(objective, x0, method='L-BFGS-B', jac=gradient, bounds=bounds)
+    print("L-inf norm of initial guess residuals: ", np.linalg.norm(A @ yvec(x0) - b, np.inf))
+
+    result = opt.minimize(objective, x0,
+                          method='L-BFGS-B',
+                          bounds=list(zip(lower, upper)),
+                          options={ "maxiter": 1e5})
     if not result.success:
         print("!!! Failed to solve !!!")
         print("Details: ")
         print(result)
     else:
         print("Success!")
-        print(result.x)
-
-    predicted_b = A @ result.x
-    # print("Residual l-inf norm: ", predicted_b - b)
-
-    estimated_lengths = [] # [ 0.1, 0.1, 0.16 ]
 
     solution = result.x
+    predicted_b = A @ yvec(result.x)
+    print("L-inf norm of residuals: ", np.linalg.norm(predicted_b - b, np.inf))
+    print("Normalized L2 norm of residuals: ", np.linalg.norm(predicted_b - b, 1) / b.shape[0])
 
+    # serialize solution
     link_masses = []
+    for i in range(links):
+        if arm_type == ArmType.PSM and i == 4:
+            continue
 
-    for i in range(6-removed_links):
         mass = solution[4 * i]
-        if mass == 0:
-            mass = 1.0
         com = solution[4*i + 1:4 * i + 4]
-        if i < len(estimated_lengths):
-            mass = np.linalg.norm(com, 2) / estimated_lengths[i]
-        com = com / mass
-        link_index = (indices[4 * i] // 4) + 1
-        link_mass = f'link {link_index} | "mass": {mass:.3f}, "cx": {com[0]: 7.3f}, "cy": {com[1]: 7.3f}, "cz": {com[2]: 7.3f}'
+        link_mass = f'link {i + 1} | "mass": {mass:.3f}, "cx": {com[0]: 7.3f}, "cy": {com[1]: 7.3f}, "cz": {com[2]: 7.3f}'
         link_masses.append(link_mass)
         print(link_mass)
 
@@ -86,8 +146,10 @@ def solve(A, b, lambda1 = 0.001, lambda2 = 0.01):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument('-t', '--type', choices=["PSM", "ECM"], required=True,
+                        help = "type of arm")
     parser.add_argument('-i', '--input', type=str, required=True,
-                        help = "input file containing mass determination equation")
+                        help = "input file containing mass determination equations")
     parser.add_argument('-o', '--output', type=str, required=True,
                         help = "output file name")
     args = parser.parse_args()
@@ -96,7 +158,19 @@ if __name__ == "__main__":
     A = Eq[:, 0:-1]
     b = Eq[:, -1]
 
-    ok, link_masses = solve(A, b)
+    arm_type = ArmType.PSM if args.type == "PSM" else ArmType.ECM
+
+    if arm_type == ArmType.PSM:
+        assert(A.shape[1] == 6 * 4)
+    elif arm_type == ArmType.ECM:
+        assert(A.shape[1] == 5 * 4)
+    else:
+        assert(False)
+
+    ok, link_masses = solve(A, b, arm_type)
+    if not ok:
+        sys.exit(-1)
+
     with open(args.output, 'w') as f:
         for mass in link_masses:
             f.write(f"{mass}\n")
