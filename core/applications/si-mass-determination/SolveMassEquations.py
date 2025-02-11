@@ -51,7 +51,7 @@ def solve(A, b, arm_type, lambda1 = 0.01, lambda2 = 0.1):
 
         if arm_type == ArmType.PSM:
             # completely ignore first insertion stage
-            lower[4 * 4 + 0], uppper[4 * 4 + 0] = 0.0, 0.0
+            lower[4 * 4 + 0], upper[4 * 4 + 0] = 0.0, 0.0
             set_com_bounds(4, (0.0, 0.0), (0.0, 0.0), (0.0, 0.0))
 
             set_com_bounds(5, ( 0.00,  0.02), ( 0.00,  0.00), (-0.10,  0.10))

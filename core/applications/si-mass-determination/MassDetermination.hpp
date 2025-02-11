@@ -59,25 +59,33 @@ joint_pose reduced_to_full(double yaw, double pitch, double insertion, ArmType t
 
     joint_pose joint_positions(n_joints, 0.0);
 
-    joint_positions[0] = yaw;             
+    joint_positions[0] = yaw;
     joint_positions[1] = 0.0;             // passive/virtual joint
     joint_positions[2] = pitch;           // parallelogram joint 1
     joint_positions[3] = -pitch;          // parallelogram joint 2
     joint_positions[4] = pitch;           // parallelogram joint 3
-    joint_positions[5] = insertion;
+
+    // ECM has single insertion joint, PSM uses two-stage insertion
+    if (type == ArmType::ECM) {
+        joint_positions[5] = insertion;
+    } else {
+        joint_positions[5] = 0.5 * insertion;
+        joint_positions[6] = 0.5 * insertion;
+    }
 
     return joint_positions;
 }
 
 // given efforts for all joints (both active and passive),
 // returns the efforts actually measured by the PSM Si
-joint_efforts measured_efforts(const joint_efforts& all_efforts) 
+joint_efforts measured_efforts(const joint_efforts& all_efforts, ArmType type)
 {
     double yaw_effort = all_efforts[0];
     // joint 1 is passive
     // physical joints 2-4 are all connected to one motor, joint 3 is oriented opposite
     double pitch_effort = all_efforts[2] - all_efforts[3] + all_efforts[4];
-    double insertion_effort = all_efforts[5];
+
+    double insertion_effort = (type == ArmType::ECM) ? all_efforts[5] : all_efforts[6];
 
     return vctDoubleVec(3, yaw_effort, pitch_effort, insertion_effort);
 }
@@ -113,7 +121,7 @@ vctVec read_vec(std::string data) {
     while (ss >> value) {
         values.push_back(value);
     }
-    
+
     vctVec output(values.size(), 0.0);
     for (size_t i = 0; i < values.size(); i++) {
         output[i] = values[i];
@@ -134,7 +142,7 @@ std::istream& operator>>(std::istream& st, Sample& sample)
 
     std::getline(line_ss, pose, sample_delimiter);
     std::getline(line_ss, efforts);
-    
+
     sample.pose = read_vec(pose);
     sample.efforts = read_vec(efforts);
 

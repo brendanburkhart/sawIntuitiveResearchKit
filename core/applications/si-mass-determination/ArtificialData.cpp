@@ -33,7 +33,7 @@ http://www.cisst.org/cisst/license.txt.
 
 namespace mass_determination {
 
-std::vector<Sample> artificial_data(const robManipulator& m, double mounting_angle) {
+std::vector<Sample> artificial_data(const robManipulator& m, double mounting_angle, ArmType arm_type) {
     std::vector<Sample> samples;
     vctDoubleVec zero_velocity = vctDoubleVec(m.links.size(), 0.0);
 
@@ -47,9 +47,9 @@ std::vector<Sample> artificial_data(const robManipulator& m, double mounting_ang
         for (const double pitch : pitch_angles) {
             for (const double insertion : insertions) {
                 joint_pose reduced_joints = vctVec(3, yaw, pitch, insertion);
-                joint_pose joints = reduced_to_full(yaw, pitch, insertion);
+                joint_pose joints = reduced_to_full(yaw, pitch, insertion, arm_type);
                 joint_efforts efforts = m.CCG_MDH(joints, zero_velocity, gravity);
-                joint_efforts measured = measured_efforts(efforts);
+                joint_efforts measured = measured_efforts(efforts, arm_type);
 
                 samples.push_back({ reduced_joints, measured });
             }
@@ -65,12 +65,16 @@ int main(int argc, char * argv[])
 {
     cmnCommandLineOptions options;
     std::string kinematic_config;
+    std::string arm_type_name;
     double mounting_angle = 0.0;
     std::string output_name;
 
     options.AddOptionOneValue("c", "config",
                               "kinematic configuration file",
                               cmnCommandLineOptions::REQUIRED_OPTION, &kinematic_config);
+    options.AddOptionOneValue("t", "type",
+                              "type of arm, must be 'ECM' or 'PSM'",
+                              cmnCommandLineOptions::REQUIRED_OPTION, &arm_type_name);
     options.AddOptionOneValue("a", "angle",
                               "mounting angle of robot, zero is horizontal, positive is down",
                               cmnCommandLineOptions::OPTIONAL_OPTION, &mounting_angle);
@@ -78,6 +82,17 @@ int main(int argc, char * argv[])
                               "output file name",
                               cmnCommandLineOptions::REQUIRED_OPTION, &output_name);
     if (!options.Parse(argc, argv, std::cerr)) {
+        return -1;
+    }
+
+    mass_determination::ArmType arm_type;
+    if (arm_type_name == "ECM") {
+        arm_type = mass_determination::ArmType::ECM;
+    } else if (arm_type_name == "PSM") {
+        arm_type = mass_determination::ArmType::PSM;
+    } else {
+        std::cout << "Invalid arm type name \"" << arm_type_name << "\","
+                  << " must be either \"ECM\" or \"PSM\"" << std::endl;
         return -1;
     }
 
@@ -97,10 +112,10 @@ int main(int argc, char * argv[])
     }
 
     std::cout << "Creating artificial data samples..." << std::endl;
-    std::vector<mass_determination::Sample> samples = mass_determination::artificial_data(manipulator, mounting_angle);
+    std::vector<mass_determination::Sample> samples = mass_determination::artificial_data(manipulator, mounting_angle, arm_type);
 
     std::cout << "Created " << samples.size() << " samples" << std::endl;
-    
+
     std::fstream output{output_name, output.trunc | output.out};
     if (!output.is_open()) {
         std::cout << "Failed to open output file!" << std::endl;

@@ -60,10 +60,13 @@ void set_com_k(robManipulator& m, size_t k, size_t axis, double mass) {
     m.links.at(k).MassData() = robMass(mass, com, 0.0 * eye, eye);
 }
 
-Equations construct_equations(std::vector<Sample> samples, robManipulator& m, double mounting_angle) {
+Equations construct_equations(std::vector<Sample> samples,
+                              robManipulator& m,
+                              double mounting_angle,
+                              mass_determination::ArmType arm_type) {
     vctDoubleVec zero_velocity = vctDoubleVec(m.links.size(), 0.0);
 
-    size_t N = measured_efforts(zero_velocity).size();
+    size_t N = measured_efforts(zero_velocity, arm_type).size();
     size_t n_dims = 4 * (m.links.size() - 1);
 
     vctDoubleMat equations(samples.size() * N, n_dims, VCT_COL_MAJOR);
@@ -81,11 +84,11 @@ Equations construct_equations(std::vector<Sample> samples, robManipulator& m, do
                 continue;
             }
 
-            joint_pose pose = reduced_to_full(sample.pose[0], sample.pose[1], sample.pose[2]);
+            joint_pose pose = reduced_to_full(sample.pose[0], sample.pose[1], sample.pose[2], arm_type);
 
             clear_mass_data(m);
             set_mass_k(m, k, 1.0);
-            vctDoubleVec constant_efforts = measured_efforts(m.CCG_MDH(pose, zero_velocity, gravity));
+            vctDoubleVec constant_efforts = measured_efforts(m.CCG_MDH(pose, zero_velocity, gravity), arm_type);
             for (size_t p = 0; p < N; p++) {
                 equations.at(sample_idx * N + p, 4 * idx) = constant_efforts[p];
             }
@@ -94,7 +97,7 @@ Equations construct_equations(std::vector<Sample> samples, robManipulator& m, do
                 clear_mass_data(m);
                 set_com_k(m, k, axis, 1.0);
 
-                vctDoubleVec efforts = measured_efforts(m.CCG_MDH(pose, zero_velocity, gravity));
+                vctDoubleVec efforts = measured_efforts(m.CCG_MDH(pose, zero_velocity, gravity), arm_type);
                 vctDoubleVec com_efforts = efforts - constant_efforts;
                 for (size_t p = 0; p < N; p++) {
                     equations.at(sample_idx * N + p, 4 * idx + 1 + axis) = com_efforts[p];
@@ -118,12 +121,16 @@ int main(int argc, char * argv[])
 {
     cmnCommandLineOptions options;
     std::string kinematic_config;
+    std::string arm_type_name;
     std::string data_file;
     std::string output_file;
     double mounting_angle = 0.0;
     options.AddOptionOneValue("c", "config",
                               "kinematic configuration file",
                               cmnCommandLineOptions::REQUIRED_OPTION, &kinematic_config);
+    options.AddOptionOneValue("t", "type",
+                              "type of arm, must be 'ECM' or 'PSM'",
+                              cmnCommandLineOptions::REQUIRED_OPTION, &arm_type_name);
     options.AddOptionOneValue("a", "angle",
                               "mounting angle of robot, zero is horizontal, positive is down",
                               cmnCommandLineOptions::OPTIONAL_OPTION, &mounting_angle);
@@ -134,6 +141,17 @@ int main(int argc, char * argv[])
                               "output file name",
                               cmnCommandLineOptions::REQUIRED_OPTION, &output_file);
     if (!options.Parse(argc, argv, std::cerr)) {
+        return -1;
+    }
+
+    mass_determination::ArmType arm_type;
+    if (arm_type_name == "ECM") {
+        arm_type = mass_determination::ArmType::ECM;
+    } else if (arm_type_name == "PSM") {
+        arm_type = mass_determination::ArmType::PSM;
+    } else {
+        std::cout << "Invalid arm type name \"" << arm_type_name << "\","
+                  << " must be either \"ECM\" or \"PSM\"" << std::endl;
         return -1;
     }
 
@@ -167,7 +185,7 @@ int main(int argc, char * argv[])
     std::cout << "Loaded " << samples.size() << " data samples" << std::endl;
 
     std::cout << "Constructing mass determination equations" << std::endl;
-    auto equations = mass_determination::construct_equations(samples, manipulator, mounting_angle);
+    auto equations = mass_determination::construct_equations(samples, manipulator, mounting_angle, arm_type);
 
     std::fstream output{output_file, output.trunc | output.out};
     if (!output.is_open()) {
