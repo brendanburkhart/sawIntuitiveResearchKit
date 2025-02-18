@@ -517,6 +517,15 @@ class CISST_EXPORT mtsIntuitiveResearchKitArm: public mtsTaskPeriodic
         mtsFunctionWrite goal_reached_event; // sends true if goal reached, false otherwise
     } m_trajectory_j;
 
+    struct {
+        vct3 start_position, goal_position;
+        vctFrm4x4 goal;
+        double look_ahead = 0.01; // 1 cm look ahead
+        double speed = 0.02; // 2 cm/s
+        size_t max_count = 10; // reevaluate goal every 10 iters
+        size_t count = 0;
+    } m_cartesian_trajectory;
+
     // homing
     bool m_encoders_biased_from_pots = false; // encoders biased from pots
     bool m_encoders_biased = false; // encoder might have to be biased on joint limits (MTM roll)

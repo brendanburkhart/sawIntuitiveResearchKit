@@ -1576,7 +1576,83 @@ void mtsIntuitiveResearchKitArm::control_servo_cp(void)
 
 void mtsIntuitiveResearchKitArm::control_move_cp(void)
 {
-    // trajectories are computed in joint space for now
+    // if not time to re-evaluate, just execute current joint-space trajectory
+    if (m_cartesian_trajectory.count-- > 0) {
+        control_move_jp();
+    }
+
+    vct3 position = m_local_measured_cp.Position().Translation();
+
+    // project current position onto straight-line path between start and goal
+    vct3 delta = position - m_cartesian_trajectory.start_position;
+    vct3 direction = m_cartesian_trajectory.goal_position - m_cartesian_trajectory.start_position;
+    double dirNorm2 = direction.DotProduct(direction);
+    double t = dirNorm2 > 1e6 ? delta.DotProduct(direction) / dirNorm2 : 1.0;
+    t = std::max(0.0, std::min(1.0, t)); // clamp to [0, 1]
+    double proj_t = t;
+    vct3 projected = m_cartesian_trajectory.start_position + t * direction;
+
+    vct3 goal_translation = projected;
+
+    // intersection between look-ahead circle and straight-line path
+    double radius = m_cartesian_trajectory.look_ahead;
+    vct3 dist = direction - position;
+    double a = dirNorm2;
+    double b = 2 * direction.DotProduct(dist);
+    double c = dist.DotProduct(dist) - (radius * radius);
+    double discriminant = b * b - 4 * a * c;
+    if (discriminant < 0.0) {
+        goal_translation = projected;
+    } else {
+        t = (-b + std::sqrt(discriminant)) / (2 * a);
+        t = std::max(0.0, std::min(1.0, t)); // clamp to [0, 1]
+        goal_translation = m_cartesian_trajectory.start_position + t * direction;
+    }
+
+    vctDoubleAxAnRot3 rotation_delta = vctDoubleAxAnRot3((m_local_measured_cp.Position().Inverse() * vctFrameBase<vctMatRot3>(m_cartesian_trajectory.goal)).Rotation());
+    double angle = ((t - proj_t) / proj_t) * rotation_delta.Angle();
+    vctMatRot3 goal_rot = m_local_measured_cp.Position().Rotation() * vctMatRot3(vctDoubleAxAnRot3(rotation_delta.Axis(), angle));
+    vctFrm4x4 current_goal;
+    current_goal.Translation() = goal_translation;
+    current_goal.Rotation().FromNormalized(goal_rot);
+
+    vct3 goal_velocity;
+    if (t < 1.0) {
+        goal_velocity = m_cartesian_trajectory.speed * direction / direction.Norm();
+    } else {
+        goal_velocity.Zeros();
+    }
+
+    vctDoubleVec jp(m_kin_measured_js.Position());  // initialize IK with current joint pose
+    robManipulator::Errno ik_result = InverseKinematics(jp, current_goal);
+
+    if (ik_result == robManipulator::ESUCCESS) {
+        m_cartesian_trajectory.count = m_cartesian_trajectory.max_count;
+        ToJointsPID(jp, m_trajectory_j.goal);
+
+        vctDoubleVec jv(jp.size());
+        vctDoubleVec cv(6);
+        cv.Ref(3).Assign(goal_velocity);
+        cv.Ref(3, 3).Zeros(); // TODO: proper rotational velocity goal
+        // update the body jacobian pseudo inverse
+        vctDoubleMat body_jacobian(6, jp.size(), 0.0);
+        Manipulator->JacobianBody(jp, body_jacobian);
+        nmrPInverse(body_jacobian, m_jacobian_pinverse_data);
+        jv.ProductOf(m_jacobian_pinverse_data.PInverse(), cv);
+        m_trajectory_j.goal_v.Assign(jv);
+    } else {
+        // shows robManipulator error if used
+        if (this->Manipulator) {
+            m_arm_interface->SendError(this->GetName()
+                                       + ": unable to solve inverse kinematics ("
+                                       + this->Manipulator->LastError() + ")");
+        } else {
+            m_arm_interface->SendError(this->GetName() + ": unable to solve inverse kinematics");
+        }
+        m_trajectory_j.goal_reached_event(false);
+        UpdateIsBusy(false);
+    }
+
     control_move_jp();
 }
 
@@ -2112,19 +2188,19 @@ void mtsIntuitiveResearchKitArm::move_cp(const prmPositionCartesianSet & cp)
     SetControlSpaceAndMode(mtsIntuitiveResearchKitArmTypes::CARTESIAN_SPACE,
                            mtsIntuitiveResearchKitArmTypes::TRAJECTORY_MODE);
 
-    // copy current position
-    vctDoubleVec jp(m_kin_measured_js.Position());
-
     // compute desired slave position
     CartesianPositionFrm.From(cp.Goal());
 
+    m_cartesian_trajectory.goal = m_base_frame.Inverse() * CartesianPositionFrm;
+    m_cartesian_trajectory.goal_position = m_cartesian_trajectory.goal.Translation();
+    m_cartesian_trajectory.start_position = m_local_measured_cp.Position().Translation();
+
+    // verify final goal is reachable
+    vctDoubleVec jp(m_kin_measured_js.Position());  // initialize IK with current joint pose
     if (this->InverseKinematics(jp, m_base_frame.Inverse() * CartesianPositionFrm) == robManipulator::ESUCCESS) {
         // make sure trajectory is reset
+        m_cartesian_trajectory.count = 0;
         control_move_jp_on_start();
-        // new goal
-        clip_jp(jp);
-        ToJointsPID(jp, m_trajectory_j.goal);
-        m_trajectory_j.goal_v.Zeros();
     } else {
         // shows robManipulator error if used
         if (this->Manipulator) {
