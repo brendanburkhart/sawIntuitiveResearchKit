@@ -1576,10 +1576,16 @@ void mtsIntuitiveResearchKitArm::control_servo_cp(void)
 
 void mtsIntuitiveResearchKitArm::control_move_cp(void)
 {
+    if (1.0 - m_cartesian_trajectory.t < 1e-5 && !m_trajectory_j.is_active) {
+        return;
+    }
+
     // if not time to re-evaluate, just execute current joint-space trajectory
     if (m_cartesian_trajectory.count-- > 0) {
         control_move_jp();
+        return;
     }
+    m_cartesian_trajectory.count = 1;
 
     vct3 position = m_local_measured_cp.Position().Translation();
 
@@ -1587,7 +1593,7 @@ void mtsIntuitiveResearchKitArm::control_move_cp(void)
     vct3 delta = position - m_cartesian_trajectory.start_position;
     vct3 direction = m_cartesian_trajectory.goal_position - m_cartesian_trajectory.start_position;
     double dirNorm2 = direction.DotProduct(direction);
-    double t = dirNorm2 > 1e6 ? delta.DotProduct(direction) / dirNorm2 : 1.0;
+    double t = dirNorm2 >= 1e-6 ? delta.DotProduct(direction) / dirNorm2 : 1.0;
     t = std::max(0.0, std::min(1.0, t)); // clamp to [0, 1]
     double proj_t = t;
     vct3 projected = m_cartesian_trajectory.start_position + t * direction;
@@ -1596,28 +1602,45 @@ void mtsIntuitiveResearchKitArm::control_move_cp(void)
 
     // intersection between look-ahead circle and straight-line path
     double radius = m_cartesian_trajectory.look_ahead;
-    vct3 dist = direction - position;
+    vct3 dist = m_cartesian_trajectory.start_position - position;
     double a = dirNorm2;
     double b = 2 * direction.DotProduct(dist);
     double c = dist.DotProduct(dist) - (radius * radius);
     double discriminant = b * b - 4 * a * c;
-    if (discriminant < 0.0) {
-        goal_translation = projected;
+    if (discriminant < 0.0 || dirNorm2 < 1e-6) {
+        std::cout << "using projected: disc: " << discriminant << ", a: " << a << ", b: " << b << ", c: " << c << std::endl;
     } else {
         t = (-b + std::sqrt(discriminant)) / (2 * a);
         t = std::max(0.0, std::min(1.0, t)); // clamp to [0, 1]
-        goal_translation = m_cartesian_trajectory.start_position + t * direction;
     }
 
+    // make sure t monotonically increases
+    t = std::max(t, m_cartesian_trajectory.t);
+    m_cartesian_trajectory.t = t;
+    goal_translation = m_cartesian_trajectory.start_position + t * direction;
+    if (t > 1.0 - 1e-6) {
+        goal_translation = m_cartesian_trajectory.goal_position;
+    }
+
+    std::cout << "T-value: " << t << std::endl;
+
     vctDoubleAxAnRot3 rotation_delta = vctDoubleAxAnRot3((m_local_measured_cp.Position().Inverse() * vctFrameBase<vctMatRot3>(m_cartesian_trajectory.goal)).Rotation());
-    double angle = ((t - proj_t) / proj_t) * rotation_delta.Angle();
+    double angle = rotation_delta.Angle();
+    if (1 - proj_t < 1e-6) {
+        angle = 1.0;
+    } else {
+        angle = angle * (t - proj_t) / (1.0 - proj_t);
+    }
     vctMatRot3 goal_rot = m_local_measured_cp.Position().Rotation() * vctMatRot3(vctDoubleAxAnRot3(rotation_delta.Axis(), angle));
+    if (t > 1.0 - 1e-6) {
+        goal_rot = vctMatRot3(m_cartesian_trajectory.goal.Rotation());
+    }
     vctFrm4x4 current_goal;
     current_goal.Translation() = goal_translation;
     current_goal.Rotation().FromNormalized(goal_rot);
 
     vct3 goal_velocity;
-    if (t < 1.0) {
+    if (t < 1.0 - 1e-6) {
         goal_velocity = m_cartesian_trajectory.speed * direction / direction.Norm();
     } else {
         goal_velocity.Zeros();
@@ -1630,16 +1653,25 @@ void mtsIntuitiveResearchKitArm::control_move_cp(void)
         m_cartesian_trajectory.count = m_cartesian_trajectory.max_count;
         ToJointsPID(jp, m_trajectory_j.goal);
 
-        vctDoubleVec jv(jp.size());
-        vctDoubleVec cv(6);
-        cv.Ref(3).Assign(goal_velocity);
-        cv.Ref(3, 3).Zeros(); // TODO: proper rotational velocity goal
         // update the body jacobian pseudo inverse
         vctDoubleMat body_jacobian(6, jp.size(), 0.0);
         Manipulator->JacobianBody(jp, body_jacobian);
+
+        vctDoubleVec jv(jp.size(), 0.0);
+        vctDoubleVec cv(6);
+        cv.Ref(3).Assign(goal_velocity);
+        // TODO: make speed configurable
+        double rot_speed = (t < 1.0 - 1e-6) ? 1.0 : 0.0;
+        vct3 cv_rot = rot_speed * m_local_measured_cp.Position().Rotation() * rotation_delta.Axis();
+        cv.Ref(3, 3).Assign(cv_rot);
+
+        std::cout << cv << std::endl;
+
         nmrPInverse(body_jacobian, m_jacobian_pinverse_data);
         jv.ProductOf(m_jacobian_pinverse_data.PInverse(), cv);
-        m_trajectory_j.goal_v.Assign(jv);
+
+        m_trajectory_j.goal_v.Zeros();
+        m_trajectory_j.goal_v.Ref(jv.size()).Assign(jv);
     } else {
         // shows robManipulator error if used
         if (this->Manipulator) {
@@ -1652,7 +1684,7 @@ void mtsIntuitiveResearchKitArm::control_move_cp(void)
         m_trajectory_j.goal_reached_event(false);
         UpdateIsBusy(false);
     }
-
+    
     control_move_jp();
 }
 
@@ -2200,6 +2232,7 @@ void mtsIntuitiveResearchKitArm::move_cp(const prmPositionCartesianSet & cp)
     if (this->InverseKinematics(jp, m_base_frame.Inverse() * CartesianPositionFrm) == robManipulator::ESUCCESS) {
         // make sure trajectory is reset
         m_cartesian_trajectory.count = 0;
+        m_cartesian_trajectory.t = 0.0;
         control_move_jp_on_start();
     } else {
         // shows robManipulator error if used

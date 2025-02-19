@@ -520,10 +520,11 @@ class CISST_EXPORT mtsIntuitiveResearchKitArm: public mtsTaskPeriodic
     struct {
         vct3 start_position, goal_position;
         vctFrm4x4 goal;
-        double look_ahead = 0.01; // 1 cm look ahead
+        double look_ahead = 0.01; // 2 cm look ahead
         double speed = 0.02; // 2 cm/s
-        size_t max_count = 10; // reevaluate goal every 10 iters
+        size_t max_count = 1; // reevaluate goal every other iter
         size_t count = 0;
+        double t = 0.0;
     } m_cartesian_trajectory;
 
     // homing
