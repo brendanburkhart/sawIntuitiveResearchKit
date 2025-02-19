@@ -522,10 +522,12 @@ class CISST_EXPORT mtsIntuitiveResearchKitArm: public mtsTaskPeriodic
 
     struct {
         vct3 start_position, goal_position;
+        vctMatRot3 start_orientation;
+        vctAxAnRot3 rotation_delta;
         vctFrm4x4 goal;
-        double look_ahead = 0.01; // 2 cm look ahead
-        double speed = 0.02; // 2 cm/s
-        size_t max_count = 1; // reevaluate goal every other iter
+        double look_ahead = 0.01; // meters, look ahead distance
+        double speed = 0.04; // m/s, doesn't actually work
+        size_t max_count = 0; // reevaluate goal every iter
         size_t count = 0;
         double t = 0.0;
     } m_cartesian_trajectory;
