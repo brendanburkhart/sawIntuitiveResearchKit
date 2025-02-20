@@ -169,6 +169,7 @@ if (cisst_FOUND)
          ${sawIntuitiveResearchKit_HEADER_DIR}/prmActuatorJointCouplingCheck.h
          ${sawIntuitiveResearchKit_HEADER_DIR}/prmConfigurationJointFromManipulator.h
          ${sawIntuitiveResearchKit_HEADER_DIR}/robGravityCompensation.h
+         ${sawIntuitiveResearchKit_HEADER_DIR}/CartesianTrajectory.h
         )
 
     set (SOURCE_FILES
